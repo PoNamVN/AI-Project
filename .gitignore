@@ -31,3 +31,4 @@ Thumbs.db
 logs/
 wandb/
 /.kickoff-build/
+/reports/audit/

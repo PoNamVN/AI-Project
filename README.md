@@ -2,7 +2,7 @@
 
 Repo chung: **https://github.com/PoNamVN/AI-Project**.
 
-> Trạng thái 28/10/2026: xác định phạm vi và khảo sát nguồn. Chưa có dataset được duyệt, mô hình đã huấn luyện hay số liệu độ chính xác. App hiện chỉ là trang giới thiệu Streamlit, chưa nhận diện ảnh.
+> Trạng thái 28/10/2026: đã có công cụ khảo sát ảnh Tesla và giao diện Data Studio. Chưa có dataset thực được duyệt, mô hình đã huấn luyện hay số liệu nhận diện. Công cụ kiểm tra dữ liệu, chưa dự đoán tên xe.
 
 ## 1. Giải thích dự án
 
@@ -116,7 +116,27 @@ Dùng trực tiếp Python trong `.venv` nên không cần kích hoạt hay đ�
 
 Mở **Local URL** terminal hiển thị, thường là `http://localhost:8501`. Nếu trình duyệt không tự mở, dán URL vào trình duyệt.
 
-**Kết quả đúng hiện tại:** trang CarVision AI hiển thị trạng thái chuẩn bị dữ liệu và luồng Tesla dự kiến. Chưa có chức năng nhận diện thật. Chạy được trang không có nghĩa AI đã hoạt động.
+**Kết quả hiện tại:** Tesla Data Studio mở giao diện khảo sát. Đặt ảnh theo lớp trong `data/raw/tesla/` rồi bấm **Quét dữ liệu** để xem thống kê, ảnh lỗi/trùng, ảnh mẫu và tải CSV/JSON. Khi chưa có ảnh, giao diện hiện hướng dẫn, không tạo số liệu giả. Chưa có mô hình dự đoán tên xe.
+
+Hướng dẫn chi tiết: [Week 2 Data Audit](docs/week2_data_audit.md).
+
+```text
+data/raw/tesla/
+  model_s/
+  model_3/
+  model_x/
+  model_y/
+  cybertruck/
+```
+
+Ảnh trực tiếp trong mỗi thư mục được gắn nhãn ứng viên theo tên thư mục; cần kiểm tra nhãn bằng mắt. Không cần tạo đủ các thư mục trống để quét phần dữ liệu đang có. Có thể thêm `provenance.csv` để ghi nguồn, giấy phép và mã xe.
+
+Chạy công cụ bằng terminal và lưu báo cáo riêng cho từng lần quét:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.data_audit data/raw/tesla --output reports/audit
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
+```
 
 - Dừng: **Ctrl+C** trong terminal đang chạy.
 - Sửa app rồi lưu; làm mới trình duyệt nếu cần.
@@ -148,7 +168,10 @@ AI-Project/
   .gitignore                Loại file riêng/tạm khỏi Git
   requirements-demo.txt     Thư viện chạy trang giới thiệu
   requirements.txt          Thư viện ML dự kiến, chưa khóa phiên bản
-  app/app.py                Điểm chạy Streamlit
+  app/app.py                Giao diện khảo sát dữ liệu Streamlit
+  src/data_audit.py         Kiểm tra ảnh/nhãn/trùng và CLI xuất báo cáo
+  tests/test_*.py           Kiểm thử bằng ảnh tổng hợp, không phải dữ liệu dự án
+  docs/week2_data_audit.md   Hướng dẫn khảo sát Week 2
   data/README.md            Quy tắc nguồn ảnh và chia tập
   data/raw/                 Ảnh/nhãn gốc, hiện trống
   data/processed/           Kết quả xử lý, hiện trống
@@ -213,7 +236,71 @@ git push -u origin nam/ten-cong-viec
 
 Thay tên nhánh đúng của bạn. Chọn từng file, kiểm tra phần đã stage; tránh gửi cả dữ liệu bằng `git add .`.
 
-Tạo **Pull Request** vào `main` trên GitHub, mô tả đã sửa gì/kiểm tra thế nào, nhờ một người xem trước khi merge. Đây là quy ước nhóm, chưa khẳng định branch protection đã bật. Không force-push main.
+### Gửi Pull Request cho Nam kiểm tra
+
+1. Sau khi push nhánh riêng, mở repo trên GitHub.
+2. Chọn **Compare & pull request**; nếu chưa hiện, vào **Pull requests → New pull request**.
+3. Kiểm tra **base: main**, **compare: nhánh của bạn**.
+4. Ghi tiêu đề, phần đã thay đổi, cách kiểm tra và vấn đề còn lại.
+5. Trong **Files changed**, kiểm tra không có ảnh dataset, `.env`, token hay file ngoài nhiệm vụ.
+6. Bấm **Create pull request**, gửi link cho **Nam (PoNamVN)** để kiểm tra và merge.
+
+**Thành viên không push thẳng, không tự merge vào `main`.** Các bạn vẫn push và sửa thoải mái trên nhánh riêng. Khi cần sửa PR, sửa file trên chính nhánh đó, commit và `git push`; PR tự cập nhật, không cần tạo PR mới.
+
+### Sau khi Nam đã merge
+
+Chỉ chuyển nhánh khi các thay đổi đang làm đã được lưu/commit đúng chỗ:
+
+```powershell
+git switch main
+git pull --ff-only origin main
+```
+
+Nếu không làm tiếp trên nhánh cũ, có thể xóa nhánh local sau khi kiểm tra PR đã được merge:
+
+```powershell
+git branch -d nam/ten-cong-viec
+```
+
+Thay tên nhánh bằng của bạn. Nếu `-d` từ chối, có thể PR đã được squash merge hoặc nhánh còn commit khác; nhờ Nam kiểm tra, không tự dùng `-D`.
+
+### Nếu lỡ sửa file khi đang đứng ở main
+
+Nếu thay đổi **chưa commit**, tạo nhánh mới để mang các thay đổi sang:
+
+```powershell
+git switch -c nam/mo-ta-cong-viec
+git status
+```
+
+Sau đó chọn file, commit, push nhánh và tạo PR như bình thường. Nếu **đã commit vào main local**, chưa push và báo Nam để chuyển commit sang nhánh riêng; không tự reset hoặc force-push.
+
+### Cấu hình ruleset bảo vệ main (Nam thiết lập)
+
+Đây là **cấu hình nhóm cần áp dụng**, không phải xác nhận ruleset đã được bật. Kiểm tra tại [Settings → Rules → Rulesets](https://github.com/PoNamVN/AI-Project/settings/rules).
+
+Chọn **New ruleset → New branch ruleset**:
+
+| Mục | Cấu hình |
+|---|---|
+| Ruleset name | `protect-main` |
+| Enforcement status | **Active** |
+| Target branches | Include by pattern: `main` |
+| Bypass list | **Repository admin**, chọn **For pull requests only** |
+| Restrict updates | Bật |
+| Restrict deletions | Bật |
+| Require a pull request before merging | Bật |
+| Block force pushes | Bật |
+
+Không thêm vai trò Write/Maintain hoặc thành viên khác vào bypass list. Với cấu hình này, người không có bypass không được cập nhật `main`, kể cả bằng nút merge; admin được merge qua PR nhưng không được push trực tiếp nhờ chế độ **For pull requests only**. Nếu muốn chỉ Nam merge, chỉ Nam giữ quyền admin; thêm admin khác sẽ mở quyền tương tự cho họ.
+
+Chỉ yêu cầu status checks khi nhóm đã có CI tương ứng. Không chọn kiểm tra chưa tồn tại rồi coi như đã có tự động kiểm thử. Bấm **Create/Save changes**, kiểm tra trạng thái là **Active**, phạm vi đúng `main` và danh sách bypass đúng trước khi yêu cầu nhóm áp dụng. Các nhánh riêng không bị giới hạn bởi pattern `main` này.
+
+Tham khảo [GitHub: tạo ruleset và bypass qua PR](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository) và [quy tắc Restrict updates](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#restrict-updates).
+
+### Khi GitHub từ chối cập nhật main
+
+Thông báo như `GH013`, `repository rule violations` hoặc yêu cầu Pull Request có thể là ruleset đang bảo vệ nhánh. Không tắt ruleset hay force-push để vượt qua. Kiểm tra tên nhánh bằng `git branch --show-current`; nếu đã có nhánh riêng, push đúng nhánh đó và gửi PR cho Nam. Nếu thiếu quyền ghi trên mọi nhánh, kiểm tra lời mời cộng tác và tài khoản đăng nhập.
 
 Nếu có conflict hoặc non-fast-forward, dừng để xem nguyên nhân; không tự chạy `reset --hard`, xóa `.git` hay force-push. Push không được: kiểm tra tài khoản, quyền cộng tác, remote; có thể đăng nhập qua Git Credential Manager. Không ghi token/mật khẩu vào code.
 
@@ -229,7 +316,7 @@ Nếu có conflict hoặc non-fast-forward, dừng để xem nguyên nhân; khô
 | Cổng 8501 bận | Dừng app cũ hoặc chọn 8502 |
 | Clone được nhưng push không được | Nhận lời mời và đăng nhập đúng tài khoản có quyền |
 | Không có ảnh/model/database sau clone | Artifact chưa chuẩn bị/phân phối, không phải Git tải thiếu |
-| App chỉ hiện thông báo | Đúng trạng thái bản giới thiệu hiện tại |
+| Chưa có thống kê | Đặt ảnh vào data/raw, chọn thư mục và bấm Quét dữ liệu |
 
 ## 11. Không đưa lên Git
 
@@ -243,7 +330,7 @@ Nếu có conflict hoặc non-fast-forward, dừng để xem nguyên nhân; khô
 
 ## 12. Kiểm tra bản khởi đầu
 
-Đã thử cài requirements-demo.txt trên Windows với Python 3.12.14 và Streamlit 1.66.1, kiểm tra render app và HTTP health thành công. Schema SQLite tạo được bốn bảng trong database tạm. Chưa kiểm thử bộ ML, GPU hoặc hướng dẫn macOS/Linux.
+Môi trường demo dùng Windows, Python 3.12 và Streamlit 1.66.1. Kiểm thử audit và giao diện dùng ảnh tổng hợp, tách biệt với dữ liệu thật. Schema SQLite là thiết kế riêng, chưa tích hợp vào công cụ khảo sát. Chưa kiểm thử bộ ML, GPU hoặc hướng dẫn macOS/Linux.
 
 ## 13. Quy tắc báo cáo
 

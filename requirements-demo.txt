@@ -1,2 +1,4 @@
-# Tested informational demo dependency; ML dependencies are separate.
+# Dataset audit UI; ML training dependencies remain separate.
 streamlit==1.66.1
+pandas>=2,<4
+Pillow>=10,<14

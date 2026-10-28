@@ -1,0 +1,14 @@
+# Provisional inventory: not installed, tested together or locked.
+# Validate in Milestone 1 and save exact versions before experiments.
+tensorflow
+numpy
+pandas
+Pillow
+opencv-python-headless
+scikit-learn
+matplotlib
+seaborn
+streamlit
+jupyterlab
+# Select one dataset loader after source/terms approval.
+# sqlite3, pathlib, hashlib and json are standard-library modules.

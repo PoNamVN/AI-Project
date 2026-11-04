@@ -2,6 +2,8 @@
 
 Repo chung: **https://github.com/PoNamVN/AI-Project**.
 
+**Trước khi sửa dự án:** đọc [quy định làm việc nhóm](CONTRIBUTING.md). Công cụ AI hỗ trợ code cần tuân theo [AGENTS.md](AGENTS.md). Khi tạo PR, điền mẫu thay đổi và kết quả kiểm tra để Nam duyệt.
+
 > Trạng thái 28/10/2026: đã có công cụ khảo sát ảnh Tesla và giao diện Data Studio. Chưa có dataset thực được duyệt, mô hình đã huấn luyện hay số liệu nhận diện. Công cụ kiểm tra dữ liệu, chưa dự đoán tên xe.
 
 ## 1. Giải thích dự án
@@ -120,6 +122,14 @@ Mở **Local URL** terminal hiển thị, thường là `http://localhost:8501`.
 
 Hướng dẫn chi tiết: [Week 2 Data Audit](docs/week2_data_audit.md).
 
+### Tải bộ ảnh khảo sát tuần 3
+
+1. Tải [tesla-week3-candidate.zip](https://github.com/PoNamVN/AI-Project/releases/download/dataset-week3-v1/tesla-week3-candidate.zip) từ GitHub Releases (khoảng 196 MB). Chỉ tải một lần cho phiên bản này.
+2. Giải nén vào `data/raw/` để có `data/raw/tesla-week3-candidate/provenance.csv` và năm thư mục ảnh. Giữ file nguồn và thông tin ghi công đi kèm.
+3. Mở Tesla Data Studio, nhập `tesla-week3-candidate` trong ô thư mục và bấm **Quét dữ liệu**.
+
+Bộ ảnh gồm 91 ảnh ứng viên từ Wikimedia Commons. Đã quét định dạng và trùng chính xác. Nhóm cần rà nhãn và ảnh cùng xe trước khi chia tập huấn luyện. `git pull` cập nhật code và hướng dẫn, còn ZIP tải từ Releases.
+
 ```text
 data/raw/tesla/
   model_s/
@@ -173,7 +183,7 @@ AI-Project/
   tests/test_*.py           Kiểm thử bằng ảnh tổng hợp, không phải dữ liệu dự án
   docs/week2_data_audit.md   Hướng dẫn khảo sát Week 2
   data/README.md            Quy tắc nguồn ảnh và chia tập
-  data/raw/                 Ảnh/nhãn gốc, hiện trống
+  data/raw/                 Thư mục ảnh/nhãn lưu cục bộ
   data/processed/           Kết quả xử lý, hiện trống
   database/README.md        Giải thích database
   database/schema.sql       Schema SQLite dự thảo

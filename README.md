@@ -4,7 +4,7 @@ Repo chung: **https://github.com/PoNamVN/AI-Project**.
 
 **Trước khi sửa dự án:** đọc [quy định làm việc nhóm](CONTRIBUTING.md). Công cụ AI hỗ trợ code cần tuân theo [AGENTS.md](AGENTS.md). Khi tạo PR, điền mẫu thay đổi và kết quả kiểm tra để Nam duyệt.
 
-> Trạng thái 28/10/2026: đã có công cụ khảo sát ảnh Tesla và giao diện Data Studio. Chưa có dataset thực được duyệt, mô hình đã huấn luyện hay số liệu nhận diện. Công cụ kiểm tra dữ liệu, chưa dự đoán tên xe.
+> Trạng thái 04/11/2026: đã chạy thử CNN baseline trên 66 ảnh Tesla ứng viên sau rà soát. Đây là kết quả thử nghiệm cục bộ trên bộ ảnh nhỏ. Data Studio dùng để kiểm tra dữ liệu; CNN chạy riêng bằng Python.
 
 ## 1. Giải thích dự án
 
@@ -24,10 +24,10 @@ Phạm vi đã đổi từ nhiều hãng sang **Tesla-only**. Năm lớp ứng v
 
 | Thành phần | Mục đích | Trạng thái |
 |---|---|---|
-| Ảnh + nhãn dòng xe | Cho AI học và đánh giá | Chưa có dataset được duyệt |
+| Ảnh + nhãn dòng xe | Cho AI học và đánh giá | Có bộ ứng viên đã rà để chạy thử baseline |
 | Ảnh mẫu | Đối chiếu khi người dùng chọn | Chưa duyệt bộ ảnh và quyền hiển thị |
 | SQLite + nguồn thông số | Tra đúng năm/thị trường/phiên bản | Mới có schema dự thảo |
-| File mô hình | Dự đoán trong website | Chưa huấn luyện |
+| File mô hình | Dự đoán dòng xe | Đã huấn luyện CNN thử nghiệm, chạy riêng bằng Python |
 
 `.env` chỉ chứa cấu hình/khóa nếu sau này cần, không chứa toàn bộ database hay ảnh. App giới thiệu hiện không cần API key hoặc `.env`.
 
@@ -198,6 +198,8 @@ Khi nguồn được duyệt, đặt ảnh gốc vào `data/raw/`, đầu ra và
 
 ## 8. Phần AI làm tiếp thế nào?
 
+Để rà bộ ảnh ứng viên và chuẩn bị các tập cho CNN, xem [hướng dẫn chuẩn bị dữ liệu tuần 3](docs/week3_data_preparation.md).
+
 Thí nghiệm dự kiến: CNN cơ sở; MobileNetV2 học chuyển giao; cùng MobileNetV2 có tăng cường ảnh lúc học. Dùng cùng lớp và cách chia tập để so sánh.
 
 1. Xác minh nguồn và quyền ảnh.
@@ -206,7 +208,7 @@ Thí nghiệm dự kiến: CNN cơ sở; MobileNetV2 học chuyển giao; cùng 
 4. Chạy thử nhỏ rồi huấn luyện và đánh giá.
 5. Tích hợp mô hình, ảnh mẫu và thông số có nguồn vào website.
 
-`requirements.txt` là danh sách ML **dự kiến**, chưa phải môi trường đã kiểm chứng/khóa phiên bản. Chỉ mở trang giới thiệu thì dùng `requirements-demo.txt`. Khi làm ML, thống nhất Python, framework, phần cứng và lưu phiên bản. Danh sách hiện theo TensorFlow; không trộn PyTorch từ repo khác khi chưa thống nhất. Colab là tùy chọn.
+`requirements.txt` là danh sách ML dự kiến cho toàn dự án. Để chạy CNN tuần 3 dùng `requirements-baseline.txt` với TensorFlow CPU. Để mở Data Studio dùng `requirements-demo.txt`. Colab là tùy chọn.
 
 ## 9. Quy trình Git cho thành viên
 
@@ -340,7 +342,7 @@ Nếu có conflict hoặc non-fast-forward, dừng để xem nguyên nhân; khô
 
 ## 12. Kiểm tra bản khởi đầu
 
-Môi trường demo dùng Windows, Python 3.12 và Streamlit 1.66.1. Kiểm thử audit và giao diện dùng ảnh tổng hợp, tách biệt với dữ liệu thật. Schema SQLite là thiết kế riêng, chưa tích hợp vào công cụ khảo sát. Chưa kiểm thử bộ ML, GPU hoặc hướng dẫn macOS/Linux.
+Môi trường demo dùng Windows, Python 3.12 và Streamlit 1.66.1. Kiểm thử audit và giao diện dùng ảnh tổng hợp, tách biệt với dữ liệu thật. CNN tuần 3 đã chạy với TensorFlow 2.20.0 trên CPU. Schema SQLite là thiết kế riêng. GPU và hướng dẫn macOS/Linux chưa được kiểm chứng.
 
 ## 13. Quy tắc báo cáo
 

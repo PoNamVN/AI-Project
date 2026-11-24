@@ -2,7 +2,7 @@
 
 Đọc `README.md`, `CONTRIBUTING.md` và code liên quan trước khi sửa. Các quy tắc này áp dụng toàn repo, trừ hướng dẫn cụ thể hơn trong thư mục con.
 
-- Dự án hiện chỉ khảo sát dữ liệu Tesla; chưa có dataset được duyệt hoặc mô hình nhận diện đã huấn luyện. Không tạo kết quả hoặc số liệu để làm đầy giao diện/báo cáo.
+- Dự án có prototype nhận diện năm dòng Tesla và mô hình thử nghiệm V3.1; chưa có đánh giá đường phố độc lập đủ lớn hoặc nhãn mới được nhóm duyệt. Đọc README và PROJECT_STATUS.md để phân biệt kết quả phát triển cũ với đánh giá mới. Không tạo kết quả hoặc số liệu để làm đầy giao diện/báo cáo.
 - Chỉ sửa phần cần cho yêu cầu. Giữ thay đổi chưa commit của người dùng và file ngoài nhiệm vụ; không tự dọn hoặc ghi đè chúng.
 - Tái sử dụng `src/data_audit.py` cho logic kiểm tra dữ liệu; giao diện nằm ở `app/app.py`. Không nhân đôi logic kiểm tra trong giao diện.
 - Giữ kiểm tra đầu vào, giới hạn đọc ảnh, bảo vệ đường dẫn và xử lý lỗi. Không ghi đè dữ liệu trong `data/raw/`; đầu ra phải nằm riêng.

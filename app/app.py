@@ -1,7 +1,11 @@
-"""CarVision Week 2: local, read-only Tesla dataset exploration."""
+"""Tesla candidate recognition and dataset exploration; uploaded photos are not persisted."""
 
 import json
+import io
+import hashlib
+import os
 import sys
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -10,10 +14,11 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src.data_audit import MODELS, audit_dataset, report_csv
+from src.data_audit import MAX_PIXELS, MODELS, audit_dataset, report_csv
+from src.cloud_data import CloudData
 
 
-st.set_page_config(page_title="CarVision · Data Studio", page_icon="🚘", layout="wide")
+st.set_page_config(page_title="CarVision AI · Tesla", page_icon="🚘", layout="wide")
 st.markdown("""
 <style>
 .stApp {background: #f3f6fa; color: #102633;}
@@ -29,11 +34,239 @@ border: 1px solid #dce5ed; border-radius: 10px;}
 [data-testid="stSidebar"] {background: #e9eff5;}
 </style>
 <div class="cv-hero">
-<div class="cv-kicker">CARVISION AI / WEEK 02</div>
-<h1>Tesla Data Studio</h1>
-<p>Khám phá ảnh, kiểm tra chất lượng và chuẩn bị bằng chứng trước khi huấn luyện.</p>
+<div class="cv-kicker">CARVISION AI / TESLA</div>
+<h1>CarVision AI</h1>
+<p>Nhận diện thử nghiệm qua ảnh, đối chiếu bằng chứng và kiểm tra dữ liệu Tesla.</p>
 </div>
 """, unsafe_allow_html=True)
+
+source = st.sidebar.radio("Chế độ dữ liệu", ["Trên máy", "Supabase", "Nhận diện ảnh"], index=2)
+if source == "Nhận diện ảnh":
+    from src.recognition_workflow import compare_views, reference_preview, reviewed_result
+
+    st.subheader("Nhận diện Tesla · đối chiếu bằng ảnh")
+    st.caption("Bản thử nghiệm 5 dòng Tesla. Ảnh được xử lý tại máy chủ đang chạy app; không tự lưu ảnh tải lên vào dataset hoặc Supabase.")
+    run = Path(os.environ.get("CARVISION_VISION_RUN", str(ROOT / "data/processed/vision-recognition-v3-brand"))).resolve()
+    if not run.is_relative_to((ROOT / "data/processed").resolve()) or not (run / "model.json").is_file():
+        st.info("Chưa có model nhận diện V3 trên máy này. Làm theo docs/vision_recognition.md để chuẩn bị model.")
+        st.stop()
+
+    @st.cache_resource(show_spinner="Đang nạp mô hình nhận diện trên máy chủ…")
+    def load_recognizer(model_path, version):
+        from src.recognize_vehicle import Recognizer
+        return Recognizer(Path(model_path))
+
+    input_source = st.radio("Ảnh chiếc xe", ["Chọn từ album / máy", "Chụp trực tiếp"], horizontal=True)
+    if input_source == "Chụp trực tiếp":
+        st.caption("Cho phép trình duyệt dùng camera. Điện thoại truy cập qua mạng cần HTTPS; localhost có thể dùng camera trên máy.")
+        uploaded = st.camera_input("Chụp trọn một chiếc xe")
+    else:
+        uploaded = st.file_uploader("Chọn ảnh chiếc xe", type=["jpg", "jpeg", "png", "webp"], max_upload_size=30)
+    detailed = st.checkbox("Giải thích chi tiết và bản đồ vùng ảnh ảnh hưởng", value=True)
+    reference_source = st.radio("Nguồn ảnh đối chiếu", ["Trên máy chủ", "Supabase riêng tư"], horizontal=True)
+    st.caption("Chỉ hiển thị tối đa 3 ảnh tham chiếu; người xem không tải toàn bộ kho ảnh hoặc model.")
+    if uploaded is None:
+        for key in ("recognition", "vehicle_review", "reference_previews", "recognition_context", "second_view"):
+            st.session_state.pop(key, None)
+        st.info("Chụp rõ một chiếc xe, ưu tiên góc chéo trước hoặc chéo sau và trọn thân xe.")
+        st.stop()
+    data = uploaded.getvalue()
+    try:
+        from src.vision_features import open_image
+        preview = open_image(data)
+        preview.thumbnail((1100, 700))
+        st.image(preview, caption="Ảnh bạn cung cấp")
+    except (ValueError, OSError) as error:
+        st.error(str(error))
+        st.stop()
+    image_id = hashlib.sha256(data).hexdigest()
+    context = (image_id, input_source, detailed, (run / "model.json").stat().st_mtime_ns)
+    saved = st.session_state.get("recognition")
+    if st.session_state.get("recognition_context") != context:
+        for key in ("recognition", "vehicle_review", "reference_previews", "second_view"):
+            st.session_state.pop(key, None)
+        saved = None
+    st.session_state.recognition_context = context
+    selected_index = None
+    if saved and saved[1]["status"] == "multiple_vehicles":
+        selected_index = st.selectbox("Chọn xe theo số thứ tự khung", range(len(saved[1]["detections"])), format_func=lambda index: f"Xe {index+1}")
+        from PIL import ImageDraw
+        boxes = open_image(data)
+        drawing = ImageDraw.Draw(boxes)
+        for index, detection in enumerate(saved[1]["detections"]):
+            drawing.rectangle(detection["box"], outline="#218aa7", width=max(3, boxes.width//250))
+            drawing.text(detection["box"][:2], f"{index+1}", fill="red", stroke_width=2)
+        boxes.thumbnail((1100, 700))
+        st.image(boxes, caption="Chọn chiếc xe muốn tìm hiểu")
+    if st.button("Phân tích xe đã chọn" if selected_index is not None else "Phân tích ảnh", type="primary"):
+        for key in ("recognition", "vehicle_review", "reference_previews", "second_view"):
+            st.session_state.pop(key, None)
+        try:
+            with st.spinner("Đang phân tích chiếc xe và kiểm tra bằng chứng hình ảnh…"):
+                version = (run / "model.json").stat().st_mtime_ns
+                recognizer = load_recognizer(str(run), version)
+                result, annotated, heatmap = recognizer.analyze(data, selected_index, detailed)
+                metadata = getattr(recognizer, "metadata", {})
+                result = {**result, "model_manifest_sha256": metadata.get("manifest_sha256") if isinstance(metadata, dict) else None}
+                st.session_state.recognition = (image_id, result, annotated, heatmap)
+            if result["status"] == "multiple_vehicles" and selected_index is None:
+                st.rerun()
+        except ImportError:
+            st.error("Môi trường hiện tại chưa có thư viện vision. Cài requirements-demo.txt và requirements-vision.txt theo hướng dẫn.")
+        except (OSError, ValueError, KeyError) as error:
+            st.error(f"Chưa phân tích được ảnh: {error}")
+    saved = st.session_state.get("recognition")
+    if saved:
+        _, result, annotated, heatmap = saved
+        if result["status"] == "tesla_candidate":
+            st.success(result["message"])
+        else:
+            st.warning(result["message"])
+        if result.get("candidates"):
+            st.write("**Gợi ý để bạn đối chiếu:** Tesla " + result["candidates"][0]["model"])
+            st.caption("Có thể nhận nhầm các xe giống nhau. Hãy đối chiếu ảnh mẫu; nếu chưa chắc, thêm góc chụp phía trước hoặc phía sau của cùng chiếc xe.")
+        if annotated:
+            annotated = annotated.copy()
+            annotated.thumbnail((1100, 700))
+            st.image(annotated, caption="Vùng xe được chọn để phân tích")
+        if result.get("candidates"):
+            st.dataframe([{"Ứng viên": row["model"], "Điểm xếp hạng": round(row["ranking_score"], 4)} for row in result["candidates"]], hide_index=True, width="stretch")
+            st.caption(result["note"])
+            st.subheader("Đối chiếu trước khi xác nhận")
+            st.caption("Mỗi ứng viên có một ảnh train cùng dòng để tham khảo. Ảnh mẫu không xác nhận đời xe, phiên bản hoặc cùng một chiếc xe.")
+            references = {r["class_id"]: r for r in result.get("candidate_references", [])}
+            previews = st.session_state.setdefault("reference_previews", {})
+            for index, (column, candidate) in enumerate(zip(st.columns(3), result["candidates"]), 1):
+                with column:
+                    st.markdown(f"**{index}. Tesla {candidate['model']}**")
+                    reference = references.get(candidate.get("class_id"))
+                    if reference:
+                        cache_key = (reference_source, reference["source_path"], reference.get("sha256", ""))
+                        if cache_key not in previews:
+                            if len(previews) >= 3:
+                                previews.clear()
+                            try:
+                                previews[cache_key] = reference_preview(reference, ROOT / "data/raw", reference_source == "Supabase riêng tư")
+                            except (ValueError, OSError) as error:
+                                previews[cache_key] = str(error)
+                        photo = previews[cache_key]
+                        if isinstance(photo, str):
+                            st.warning(photo)
+                        else:
+                            st.image(photo, caption=f"Ảnh tham chiếu · {reference['model']}")
+                        st.caption(reference["license"])
+                        st.link_button("Nguồn ảnh", reference["source_url"])
+                        with st.expander("Ghi công ảnh"):
+                            st.json(reference)
+                    else:
+                        st.info("Chưa có ảnh tham chiếu phù hợp trong artifact này.")
+            if st.button("Tải lại ảnh đối chiếu"):
+                st.session_state.pop("reference_previews", None)
+                st.rerun()
+            choices = [None, *MODELS]
+            choice = st.selectbox("Theo bạn, đây là dòng nào?", choices,
+                                  format_func=lambda value: "Không có mẫu phù hợp / chưa xác định" if value is None else "Tesla " + MODELS[value],
+                                  key="review_choice_" + image_id)
+            if st.button("Lưu lựa chọn của tôi", type="primary"):
+                st.session_state.vehicle_review = reviewed_result(result, choice)
+            reviewed = st.session_state.get("vehicle_review")
+            if reviewed:
+                selected = reviewed["user_review"]["model"]
+                st.info("Bạn chọn: " + ("Tesla " + selected if selected else "Không có mẫu phù hợp / chưa xác định"))
+            st.caption("Lựa chọn chỉ nằm trong phiên hiện tại và bản JSON bạn tải; không tự sửa dự đoán, không lưu ảnh hay dùng để huấn luyện.")
+            st.caption("Đời xe, phiên bản, pin và thông số: chưa xác định. Cần năm/thị trường/phiên bản và tài liệu hãng trước khi tra cứu.")
+            st.subheader("Thêm một góc ảnh để đối chiếu")
+            st.caption("Dùng ảnh khác của cùng chiếc xe. Hệ thống so sánh hai kết quả độc lập, không cộng điểm và không tự tăng độ tin cậy.")
+            second = st.file_uploader("Ảnh góc thứ hai", type=["jpg", "jpeg", "png", "webp"], max_upload_size=30, key="second_photo")
+            same_vehicle = st.checkbox("Tôi xác nhận hai ảnh chụp cùng một chiếc xe", key="same_vehicle_" + image_id)
+            if second is None:
+                st.session_state.pop("second_view", None)
+            else:
+                second_data = second.getvalue()
+                second_id = hashlib.sha256(second_data).hexdigest()
+                existing = st.session_state.get("second_view")
+                if existing and existing["input_sha256"] != second_id:
+                    st.session_state.pop("second_view", None)
+                if st.button("Đối chiếu hai góc ảnh"):
+                    st.session_state.pop("second_view", None)
+                    if not same_vehicle:
+                        st.warning("Chỉ đối chiếu khi bạn biết hai ảnh là cùng một chiếc xe.")
+                    elif second_id == image_id:
+                        st.warning("Đây là cùng một tệp ảnh. Hãy chọn góc chụp khác.")
+                    else:
+                        try:
+                            with st.spinner("Đang phân tích góc ảnh thứ hai…"):
+                                extra, _, _ = load_recognizer(str(run), context[3]).analyze(second_data, None, False)
+                            st.session_state.second_view = {"input_sha256": second_id, "result": extra, "comparison": compare_views(result, extra), "same_vehicle": "user_declared_not_verified"}
+                        except (ImportError, ValueError, OSError, KeyError) as error:
+                            st.error(f"Chưa đối chiếu được góc thứ hai: {error}")
+            extra = st.session_state.get("second_view") if same_vehicle else None
+            if extra:
+                st.info(extra["comparison"]["message"])
+                st.caption("Ảnh thứ hai: " + extra["result"]["message"])
+            with st.expander("Giải thích kỹ thuật và bản đồ vùng ảnh ảnh hưởng"):
+                for text in result["explanation"]:
+                    st.write(text)
+                if heatmap:
+                    st.image(heatmap, caption="Đỏ: che vùng này làm điểm ứng viên giảm. Không phải bản đồ xác nhận bộ phận xe.")
+                st.caption("Các mô tả sau là giả thuyết ảnh–văn bản, chưa xác nhận sự hiện diện của bộ phận.")
+                st.dataframe([{"Nhóm": p["category"], "Mô tả gợi ý": p["hypothesis"]} for p in result["visual_hypotheses"]], hide_index=True, width="stretch")
+            with st.expander("Ba ảnh train gần nhất toàn bộ · bằng chứng tương đồng"):
+                st.caption("Có thể cùng một dòng, khác với ba ảnh đại diện cho ứng viên ở phía trên.")
+                st.json(result["references"])
+        exported = st.session_state.get("vehicle_review", result)
+        exported = {**exported, "input_sha256": image_id}
+        if result.get("candidates") and same_vehicle and st.session_state.get("second_view"):
+            exported["second_view"] = st.session_state.second_view
+        with st.expander("Chi tiết kết quả và giới hạn"):
+            st.json(exported)
+        st.download_button("Tải giải thích · JSON", json.dumps(exported, ensure_ascii=False, indent=2), "carvision-result.json", "application/json")
+    st.stop()
+
+if source == "Supabase":
+    st.subheader("Kho ảnh Tesla trên Supabase")
+    st.caption("Chỉ tải danh mục và ảnh đang chọn. Nhãn là ứng viên đã rà ban đầu, chưa phải dữ liệu được duyệt để huấn luyện.")
+    if st.button("Nạp / cập nhật danh mục", type="primary"):
+        st.session_state.pop("cloud_catalog", None)
+        st.session_state.pop("cloud_preview", None)
+        try:
+            with st.spinner("Đang đọc danh mục…"):
+                st.session_state.cloud_catalog = CloudData().catalog()
+        except ValueError as error:
+            st.error(str(error))
+    rows = st.session_state.get("cloud_catalog", [])
+    if not rows:
+        st.info("Bấm nạp danh mục sau khi cấu hình kết nối Supabase trên máy chủ. Hướng dẫn: docs/supabase_data.md.")
+        st.stop()
+    dataset = st.selectbox("Phiên bản dữ liệu", sorted({row["dataset"] for row in rows}))
+    label = st.selectbox("Dòng xe trên cloud", ["Tất cả", *MODELS.values()])
+    candidates = [row for row in rows if row["dataset"] == dataset and row["decision"] == "keep"
+                  and (label == "Tất cả" or MODELS.get(row["class_id"]) == label)]
+    if candidates:
+        relative = st.selectbox("Ảnh trên cloud", [row["relative_path"] for row in candidates])
+        row = next(row for row in candidates if row["relative_path"] == relative)
+        try:
+            saved_preview = st.session_state.get("cloud_preview")
+            if saved_preview is None or saved_preview[0] != row["sha256"]:
+                data = CloudData().image(row)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", Image.DecompressionBombWarning)
+                    with Image.open(io.BytesIO(data)) as original:
+                        if original.width * original.height > MAX_PIXELS:
+                            raise ValueError("Ảnh vượt giới hạn xem trước.")
+                        preview = ImageOps.exif_transpose(original).convert("RGB")
+                        preview.thumbnail((1100, 700))
+                st.session_state.cloud_preview = (row["sha256"], preview)
+            st.image(st.session_state.cloud_preview[1], caption=relative)
+            st.caption(f"Mục đích: {row['purpose']} · Tập cũ: {row['split']} · Giấy phép: {row['license']}")
+            with st.expander("Nguồn, tác giả và trạng thái rà soát"):
+                st.json(row["provenance"])
+        except (ValueError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
+            st.error(str(error))
+    else:
+        st.info("Chưa có ảnh đề xuất giữ cho lựa chọn này.")
+    st.warning("Bộ evaluation_only dùng riêng để đánh giá. Ảnh supplement_pending cần xác nhận nhãn và nhóm xe trước khi học.")
+    st.stop()
 
 with st.sidebar:
     st.subheader("Nguồn dữ liệu")
@@ -43,7 +276,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**5 lớp ứng viên**")
     st.write("Model S · Model 3 · Model X · Model Y · Cybertruck")
-    st.caption("Nhãn thư mục cần được người hiểu xe kiểm tra. Ứng dụng chưa nhận diện xe.")
+    st.caption("Nhãn thư mục cần được người hiểu xe kiểm tra. Chế độ này chỉ kiểm tra dữ liệu; chọn Nhận diện ảnh để thử model.")
 
 if scan:
     st.session_state.pop("audit", None)
@@ -68,7 +301,7 @@ if saved is None:
     with right:
         st.markdown("**Công cụ kiểm tra được gì?**")
         st.markdown("- Ảnh đọc được, kích thước và số ảnh từng lớp.\n- Nhãn thiếu/lạ, nguồn ảnh chưa khai báo.\n- Ảnh trùng byte hoặc pixel đã giải mã.\n- Ảnh trùng/cùng xe ở nhiều tập nếu có mã xe.\n- Báo cáo CSV và JSON để nhóm kiểm tra.")
-    st.info("Không tự kết luận quyền sử dụng, độ chính xác nhãn hay khả năng nhận diện. Chưa có dataset được duyệt và chưa huấn luyện mô hình.")
+    st.info("Không tự kết luận quyền sử dụng hoặc độ đúng của nhãn. Dataset chưa được duyệt độc lập; các model hiện có vẫn là thử nghiệm.")
     st.stop()
 
 dataset_string, report = saved
@@ -144,4 +377,4 @@ with exports:
     st.markdown("**Nguồn ảnh tùy chọn:** tạo `provenance.csv` ngay trong thư mục dataset. Mỗi dòng ghi một ảnh; đường dẫn tính từ gốc dataset.")
     st.code("relative_path,source_url,license,vehicle_id\n", language="text")
     st.write("Khai báo nguồn không có nghĩa nguồn hoặc quyền sử dụng đã được xác minh. Không biết mã xe thì để trống, không gán chung một mã cho mọi xe cùng dòng.")
-    st.warning("Chỉ phát hiện ảnh trùng byte/pixel. Ảnh đổi kích thước, crop hoặc chụp lại cùng xe cần rà soát thêm. Chưa có kiểm định nhãn, chia tập tự động hay huấn luyện mô hình.")
+    st.warning("Chỉ phát hiện ảnh trùng byte/pixel. Ảnh đổi kích thước, crop hoặc chụp lại cùng xe cần rà soát thêm. Chế độ audit không tự duyệt nhãn, chia tập hay huấn luyện model.")

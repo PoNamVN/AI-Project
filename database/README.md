@@ -1,5 +1,8 @@
 # Vehicle database
 
+The private image catalog is a separate Supabase feature: see [cloud_images.sql](cloud_images.sql)
+and [setup](../docs/supabase_data.md). It is not the vehicle specification database described below.
+
 schema.sql is a draft design, not a populated or integrated database. Vehicles represent dataset categories; variants describe market/trim/powertrain differences. Specifications store provenance per field.
 
 Future specification fields include body type, engine, power, transmission, fuel type, seats, dimensions and consumption when verified. Establish field names/units and validation after categories/sources are approved. Optional pricing is excluded initially. Missing fields stay unknown. Category/variant descriptors also need sourced verification before population; the draft will be refined to track their provenance as needed.

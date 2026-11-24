@@ -4,7 +4,11 @@ Repo chung: **https://github.com/PoNamVN/AI-Project**.
 
 **Trước khi sửa dự án:** đọc [quy định làm việc nhóm](CONTRIBUTING.md). Công cụ AI hỗ trợ code cần tuân theo [AGENTS.md](AGENTS.md). Khi tạo PR, điền mẫu thay đổi và kết quả kiểm tra để Nam duyệt.
 
-> Trạng thái 04/11/2026: đã chạy thử CNN baseline trên 66 ảnh Tesla ứng viên sau rà soát. Đây là kết quả thử nghiệm cục bộ trên bộ ảnh nhỏ. Data Studio dùng để kiểm tra dữ liệu; CNN chạy riêng bằng Python.
+> Trạng thái 25/11/2026: prototype tuần 5 mở trực tiếp chế độ nhận diện, có chọn ảnh/camera, Top-3 với ảnh train riêng cho từng ứng viên, xác nhận/chọn lại hoặc không phù hợp, và tải kết quả JSON. Có lựa chọn lấy từng ảnh đối chiếu từ Supabase riêng tư khi máy chủ đã cấu hình. Mô hình V3.1 giữ nguyên; chưa có đánh giá đường phố độc lập đủ lớn. Xem [hướng dẫn nhận diện](docs/vision_recognition.md) và [demo tuần 5](docs/week5_demo.md).
+
+Có thể thêm góc ảnh thứ hai để đối chiếu các gợi ý độc lập; hệ thống không cộng điểm hoặc tự tăng độ tin cậy.
+Đánh giá ảnh mới bằng [manifest và lệnh kiểm tra riêng](docs/independent_evaluation.md), không huấn luyện lại khi chạy đánh giá.
+Kết quả chuẩn bị bàn giao ngày 25/11: [phạm vi file và bằng chứng kiểm tra](docs/release_readiness.md).
 
 ## 1. Giải thích dự án
 
@@ -14,7 +18,7 @@ CarVision AI giúp người không rành xe tìm hiểu chiếc Tesla họ nhìn
 2. AI gợi ý Top-3 dòng Tesla trong phạm vi hỗ trợ.
 3. Người dùng đối chiếu ảnh mẫu có quyền sử dụng, xác nhận/chọn lại hoặc chọn **không có mẫu phù hợp**.
 4. Bổ sung năm, thị trường và phiên bản nếu biết.
-5. Website tra thông số có nguồn và giải thích thuật ngữ dễ hiểu.
+5. Dự kiến tra thông số có nguồn và giải thích thuật ngữ dễ hiểu; phần tra cứu này chưa triển khai.
 
 Phạm vi đã đổi từ nhiều hãng sang **Tesla-only**. Năm lớp ứng viên: **Model S, Model 3, Model X, Model Y, Cybertruck**. Chỉ chốt sau khi kiểm tra quyền sử dụng, nhãn và số ảnh; đây không phải danh sách xe hiện đang bán. Hãng cố định là Tesla, không phải bài toán phân biệt mọi hãng.
 
@@ -25,11 +29,14 @@ Phạm vi đã đổi từ nhiều hãng sang **Tesla-only**. Năm lớp ứng v
 | Thành phần | Mục đích | Trạng thái |
 |---|---|---|
 | Ảnh + nhãn dòng xe | Cho AI học và đánh giá | Có bộ ứng viên đã rà để chạy thử baseline |
-| Ảnh mẫu | Đối chiếu khi người dùng chọn | Chưa duyệt bộ ảnh và quyền hiển thị |
+| Ảnh mẫu | Đối chiếu khi người dùng chọn | Có ảnh train kèm nguồn/giấy phép theo từng ứng viên; nhãn chưa duyệt độc lập |
 | SQLite + nguồn thông số | Tra đúng năm/thị trường/phiên bản | Mới có schema dự thảo |
-| File mô hình | Dự đoán dòng xe | Đã huấn luyện CNN thử nghiệm, chạy riêng bằng Python |
+| File mô hình | Dự đoán dòng xe | Có baseline CNN/MobileNetV2 và V3.1 dùng trong chế độ Nhận diện ảnh; vẫn là thử nghiệm |
 
 `.env` chỉ chứa cấu hình/khóa nếu sau này cần, không chứa toàn bộ database hay ảnh. App giới thiệu hiện không cần API key hoặc `.env`.
+
+**Lưu ảnh trên cloud:** xem [hướng dẫn Supabase](docs/supabase_data.md) để cấu hình kho riêng tư,
+xem từng ảnh trong Data Studio hoặc tải một phiên bản dữ liệu về khi cần. Chế độ local không cần API key.
 
 Nguồn đang khảo sát, chưa phải quyết định sử dụng:
 
@@ -98,7 +105,9 @@ Bạn phải đứng ở thư mục có `README.md`, `requirements-demo.txt`, `a
 
 ## 5. Tạo môi trường và cài thư viện
 
-Tại thư mục gốc repo:
+**Muốn nhận diện xe ngay:** làm theo [hướng dẫn máy mới](docs/team_setup.md). Cần môi trường vision và gói runtime riêng do Nam cung cấp; `git clone` chỉ lấy code.
+
+Nếu chỉ mở giao diện khảo sát dữ liệu, tại thư mục gốc repo:
 
 ```powershell
 python -m venv .venv
@@ -112,13 +121,35 @@ Dùng trực tiếp Python trong `.venv` nên không cần kích hoạt hay đ�
 
 ## 6. Chạy ứng dụng
 
+Sau khi cài môi trường, kiểm tra các thư viện, file model và cache trước khi chạy:
+
+```powershell
+npm run check
+```
+
+Lệnh chỉ đọc cấu hình/tệp, không nạp mô hình, tải weights hay in khóa. Cấu hình Supabase là tùy chọn;
+kết quả kiểm tra tệp không thay thế chạy demo thực tế. Tham khảo [bàn giao tuần 5](docs/week5_demo.md).
+
+Nếu máy có Node.js/npm và đã cài môi trường Python ở trên, chạy ngắn gọn:
+
+```powershell
+npm start
+```
+
+Không cần `npm install`; npm chỉ gọi ứng dụng Python, không đổi framework.
+Lệnh ưu tiên môi trường `.venv-vision`, rồi `.kickoff-build/vision-v3` có sẵn trên máy Nam, cuối cùng `.venv`.
+Để nhận diện ảnh cần thư viện vision, model và cache theo [hướng dẫn nhận diện](docs/vision_recognition.md); lệnh này không tự tải chúng.
+Thêm tham số Streamlit sau `--`, ví dụ `npm start -- --server.port 8502`. Dừng bằng **Ctrl+C**.
+
+Nếu không dùng npm, vẫn chạy trực tiếp:
+
 ```powershell
 .\.venv\Scripts\python.exe -m streamlit run app/app.py
 ```
 
 Mở **Local URL** terminal hiển thị, thường là `http://localhost:8501`. Nếu trình duyệt không tự mở, dán URL vào trình duyệt.
 
-**Kết quả hiện tại:** Tesla Data Studio mở giao diện khảo sát. Đặt ảnh theo lớp trong `data/raw/tesla/` rồi bấm **Quét dữ liệu** để xem thống kê, ảnh lỗi/trùng, ảnh mẫu và tải CSV/JSON. Khi chưa có ảnh, giao diện hiện hướng dẫn, không tạo số liệu giả. Chưa có mô hình dự đoán tên xe.
+**Kết quả hiện tại:** CarVision AI có chế độ **Trên máy** để khảo sát dữ liệu, **Supabase** để xem ảnh cloud và **Nhận diện ảnh** để dùng model V3 nếu đã cài thư viện/model tương ứng. Đặt ảnh theo lớp trong `data/raw/tesla/` rồi bấm **Quét dữ liệu** để xem thống kê, ảnh lỗi/trùng và tải CSV/JSON. Khi chưa có ảnh/model, giao diện hiện hướng dẫn, không tạo số liệu giả. [Cài và chạy nhận diện V3](docs/vision_recognition.md).
 
 Hướng dẫn chi tiết: [Week 2 Data Audit](docs/week2_data_audit.md).
 
@@ -176,7 +207,8 @@ Hướng dẫn macOS/Linux chưa được thử trong phiên này.
 AI-Project/
   README.md                 Hướng dẫn nhóm và phạm vi dự án
   .gitignore                Loại file riêng/tạm khỏi Git
-  requirements-demo.txt     Thư viện chạy trang giới thiệu
+  requirements-demo.txt     Thư viện chạy giao diện khảo sát dữ liệu
+  requirements-vision.txt   Thư viện nhận diện PyTorch, cài môi trường riêng
   requirements.txt          Thư viện ML dự kiến, chưa khóa phiên bản
   app/app.py                Giao diện khảo sát dữ liệu Streamlit
   src/data_audit.py         Kiểm tra ảnh/nhãn/trùng và CLI xuất báo cáo
@@ -184,21 +216,27 @@ AI-Project/
   docs/week2_data_audit.md   Hướng dẫn khảo sát Week 2
   data/README.md            Quy tắc nguồn ảnh và chia tập
   data/raw/                 Thư mục ảnh/nhãn lưu cục bộ
-  data/processed/           Kết quả xử lý, hiện trống
+  data/processed/           Model/kết quả xử lý cục bộ, không đưa vào Git
   database/README.md        Giải thích database
   database/schema.sql       Schema SQLite dự thảo
-  models/README.md          Quy tắc lưu model, chưa có trọng số
+  models/README.md          Quy tắc lưu model; runtime V3.1 ở data/processed/
 ```
 
 Bản công khai ban đầu là khung tối thiểu trên. Tài liệu cá nhân/giảng viên, repo lồng và slide tạm không đi kèm.
 
 Khi nguồn được duyệt, đặt ảnh gốc vào `data/raw/`, đầu ra vào `data/processed/`, ghi nguồn, nhãn và giấy phép. Quy ước ảnh chi tiết sẽ chốt theo dataset. Không coi tên file là nhãn đúng; không để ảnh trùng/cùng xe rải sang train và test.
 
-`database/schema.sql` chưa có bản ghi xe. App hiện chưa tạo/kết nối database. Không cần MySQL/MongoDB để chạy trang giới thiệu; `sqlite3` có sẵn trong Python.
+`database/schema.sql` chưa có bản ghi thông số xe; phần tra thông số SQLite chưa tích hợp.
+Catalog ảnh Supabase là phần riêng theo [hướng dẫn cloud](docs/supabase_data.md).
+Không cần MySQL/MongoDB để chạy chế độ local; `sqlite3` có sẵn trong Python.
 
 ## 8. Phần AI làm tiếp thế nào?
 
 Để rà bộ ảnh ứng viên và chuẩn bị các tập cho CNN, xem [hướng dẫn chuẩn bị dữ liệu tuần 3](docs/week3_data_preparation.md).
+
+Để chạy MobileNetV2, tăng cường ảnh và so sánh với CNN trên cùng bộ chia, xem [thí nghiệm và báo cáo tuần 4](docs/week4_model_evaluation.md).
+
+Đợt bổ sung 82 ảnh và kết quả huấn luyện mới được ghi trong [thử nghiệm mở rộng dữ liệu](docs/week4_expanded_training.md).
 
 Thí nghiệm dự kiến: CNN cơ sở; MobileNetV2 học chuyển giao; cùng MobileNetV2 có tăng cường ảnh lúc học. Dùng cùng lớp và cách chia tập để so sánh.
 

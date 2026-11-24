@@ -1,0 +1,8 @@
+{
+  "name": "carvision-ai",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/start.cjs",
+    "check": "node scripts/start.cjs --check"
+  }
+}

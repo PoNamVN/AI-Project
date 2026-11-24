@@ -77,6 +77,38 @@ class CloudTests(unittest.TestCase):
             with self.subTest(result=result), patch.object(self.cloud, "_get", return_value=result):
                 with self.assertRaises(ValueError): self.cloud.catalog()
 
+    def test_thumbnail_is_pinned_to_original_and_verified(self):
+        row = {**self.row, "uploaded": True}
+        digest = hashlib.sha256(self.data).hexdigest()
+        preview = dict(source_sha256=row["sha256"], class_id="model_3", sha256=digest,
+                       byte_size=len(self.data), object_path=f"previews/v1/{row['sha256']}/{digest}.webp")
+        row["provenance"] = {**row["provenance"], "preview_v1": preview}
+        with patch.object(self.cloud, "_get", side_effect=[json.dumps([row]).encode(), self.data]) as get:
+            self.assertEqual(self.cloud.reference_image(row["sha256"], "model_3", thumbnail=True), self.data)
+            self.assertIn("/previews/v1/", get.call_args.args[0])
+        for changes in ({"source_sha256": "f" * 64}, {"class_id": "model_y"}, {"object_path": "../escape"}, {"byte_size": 250001}):
+            with self.subTest(changes=changes), patch.object(self.cloud, "_get") as get:
+                with self.assertRaises(ValueError): self.cloud.thumbnail_image(row, {**preview, **changes})
+                get.assert_not_called()
+        with patch.object(self.cloud, "_get", return_value=b"wrong"):
+            with self.assertRaises(ValueError): self.cloud.thumbnail_image(row, preview)
+
+    def test_publication_never_overwrites_or_drops_existing_provenance(self):
+        row = {**self.row, "uploaded": True}
+        with patch("src.cloud_data.build_opener") as opener, patch.object(self.cloud, "thumbnail_image", return_value=self.data):
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = json.dumps([{"sha256": row["sha256"]}]).encode()
+            self.assertTrue(self.cloud.publish_thumbnail(row, self.data))
+            requests = opener.return_value.open.call_args_list
+            self.assertEqual(requests[0].args[0].get_header("X-upsert"), "false")
+            request = requests[1].args[0]
+            self.assertEqual(request.method, "PATCH")
+            self.assertIn("provenance=eq.", request.full_url)
+            self.assertEqual(json.loads(request.data)["provenance"]["artist_html"], "Test artist")
+            self.assertNotIn("preview_v1", row["provenance"])
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = b"[]"
+            with self.assertRaisesRegex(ValueError, "Bản ghi đã đổi"):
+                self.cloud.publish_thumbnail(row, self.data)
+
     def test_download_preserves_provenance_and_excludes_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "download"

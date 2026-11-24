@@ -1,0 +1,4 @@
+# CPU wheels; no TensorFlow/training environment on the public web server.
+--extra-index-url https://download.pytorch.org/whl/cpu
+-r requirements-demo.txt
+-r requirements-vision.txt

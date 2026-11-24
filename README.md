@@ -2,9 +2,12 @@
 
 Repo chung: **https://github.com/PoNamVN/AI-Project**.
 
+Bản CPU gọn: [cách chạy, kết quả đối chiếu và giới hạn](docs/compact_runtime.md).
+`npm start` tự dùng môi trường ONNX khi đã cài runtime được kiểm tra; vẫn giữ bản PyTorch để đối chiếu.
+
 **Trước khi sửa dự án:** đọc [quy định làm việc nhóm](CONTRIBUTING.md). Công cụ AI hỗ trợ code cần tuân theo [AGENTS.md](AGENTS.md). Khi tạo PR, điền mẫu thay đổi và kết quả kiểm tra để Nam duyệt.
 
-> Trạng thái 25/11/2026: prototype tuần 5 mở trực tiếp chế độ nhận diện, có chọn ảnh/camera, Top-3 với ảnh train riêng cho từng ứng viên, xác nhận/chọn lại hoặc không phù hợp, và tải kết quả JSON. Có lựa chọn lấy từng ảnh đối chiếu từ Supabase riêng tư khi máy chủ đã cấu hình. Mô hình V3.1 giữ nguyên; chưa có đánh giá đường phố độc lập đủ lớn. Xem [hướng dẫn nhận diện](docs/vision_recognition.md) và [demo tuần 5](docs/week5_demo.md).
+> Trạng thái 25/11/2026: prototype tuần 5 mở trực tiếp chế độ nhận diện, có chọn ảnh/camera, Top-3 với ảnh train riêng cho từng ứng viên, xác nhận/chọn lại hoặc không phù hợp, và tải kết quả JSON. Ảnh đối chiếu tự lấy từ Supabase riêng tư khi máy chủ đã cấu hình; bản local chưa cấu hình dùng ảnh trên máy. Mô hình V3.1 giữ nguyên; chưa có đánh giá đường phố độc lập đủ lớn. Xem [hướng dẫn nhận diện](docs/vision_recognition.md) và [demo tuần 5](docs/week5_demo.md).
 
 Có thể thêm góc ảnh thứ hai để đối chiếu các gợi ý độc lập; hệ thống không cộng điểm hoặc tự tăng độ tin cậy.
 Đánh giá ảnh mới bằng [manifest và lệnh kiểm tra riêng](docs/independent_evaluation.md), không huấn luyện lại khi chạy đánh giá.
@@ -136,8 +139,16 @@ Nếu máy có Node.js/npm và đã cài môi trường Python ở trên, chạy
 npm start
 ```
 
+Mặc định chỉ mở nhận diện cho người dùng. Thành viên muốn mở thêm công cụ rà dữ liệu trên máy chạy
+`npm run start:dev`; không dùng chế độ này cho website công khai.
+Chuẩn bị triển khai online: [hướng dẫn Render và chi phí cần duyệt](docs/deploy_render.md).
+
 Không cần `npm install`; npm chỉ gọi ứng dụng Python, không đổi framework.
-Lệnh ưu tiên môi trường `.venv-vision`, rồi `.kickoff-build/vision-v3` có sẵn trên máy Nam, cuối cùng `.venv`.
+Chủ máy chủ cấu hình ảnh Supabase một lần bằng `npm run setup:cloud` (nhập key ẩn),
+kiểm tra tải một ảnh bằng `npm run check:cloud`; xem [hướng dẫn cloud](docs/supabase_data.md).
+Launcher tự đọc hai biến Supabase từ `.env` riêng, ưu tiên biến đã đặt trong môi trường triển khai.
+Lệnh tự chọn `.venv-onnx` khi runtime gọn đã qua validation. Nếu chưa có bản gọn, lệnh ưu tiên
+`.venv-vision`, rồi `.kickoff-build/vision-v3` có sẵn trên máy Nam, cuối cùng `.venv`.
 Để nhận diện ảnh cần thư viện vision, model và cache theo [hướng dẫn nhận diện](docs/vision_recognition.md); lệnh này không tự tải chúng.
 Thêm tham số Streamlit sau `--`, ví dụ `npm start -- --server.port 8502`. Dừng bằng **Ctrl+C**.
 

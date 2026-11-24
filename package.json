@@ -3,6 +3,12 @@
   "private": true,
   "scripts": {
     "start": "node scripts/start.cjs",
-    "check": "node scripts/start.cjs --check"
+    "start:lite": "node scripts/start.cjs --lite",
+    "start:torch": "node scripts/start.cjs --torch",
+    "start:dev": "node scripts/start.cjs --dev-tools",
+    "check": "node scripts/start.cjs --check",
+    "setup:cloud": "node scripts/start.cjs --setup-cloud",
+    "check:cloud": "node scripts/start.cjs --check-cloud",
+    "prepare:previews": "node scripts/start.cjs --prepare-previews"
   }
 }

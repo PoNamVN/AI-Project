@@ -17,7 +17,7 @@ def reference_preview(reference, raw_root, use_cloud=False):
             or reference.get("class_id") not in MODELS or parts[1] != reference["class_id"]):
         raise ValueError("Đường dẫn ảnh tham chiếu không hợp lệ.")
     if use_cloud:
-        data = CloudData().reference_image(reference.get("sha256", ""), reference["class_id"])
+        data = CloudData().reference_image(reference.get("sha256", ""), reference["class_id"], thumbnail=True)
     else:
         root = Path(raw_root).resolve()
         path = (root / source).resolve()

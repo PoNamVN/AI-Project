@@ -3,6 +3,9 @@
 Dành cho Windows, Python 3.12, VS Code. Website vẫn chạy bằng Python/Streamlit; `npm start` là lệnh khởi động ngắn.
 Code nằm trên Git. Model/cache và ảnh đối chiếu được chia sẻ riêng trong nhóm, không đưa vào commit.
 
+**Muốn chạy bản CPU gọn:** ưu tiên [hướng dẫn ONNX](compact_runtime.md), gói khoảng 151 MB,
+môi trường riêng không cần PyTorch. Các bước dưới đây vẫn áp dụng cho bản PyTorch đối chứng đầy đủ.
+
 ## 1. Nhận đúng phiên bản code
 
 Sau khi Nam công bố nhánh hoặc merge PR, clone vào **thư mục mới**:
@@ -91,7 +94,9 @@ Không cần `npm install`. Thiếu Node/npm thì chạy trực tiếp:
 Mở Local URL terminal đưa ra, thường `http://localhost:8501`.
 `npm run check` kiểm tra tệp và thư viện, không đo độ chính xác và không bảo đảm mọi weights load được.
 Chọn ảnh một xe đã biết để kiểm tra thật: xem Top-3, ba ảnh đối chiếu, lưu lựa chọn và tải JSON.
-Nếu camera hoặc Supabase chưa cấu hình, vẫn có thể chọn ảnh từ máy và dùng nguồn **Trên máy chủ**.
+Nếu camera hoặc Supabase chưa cấu hình, vẫn có thể chọn ảnh từ máy; nguồn ảnh tham khảo local được chọn tự động.
+Chủ máy chủ muốn dùng kho riêng tư chạy `npm run setup:cloud` một lần và nhập key ẩn theo [hướng dẫn cloud](supabase_data.md).
+Những lần sau launcher tự đọc cấu hình local; không gửi `.env` hoặc server key cho các thành viên/người dùng.
 
 Để kiểm tra CLI bằng một ảnh train có sẵn trong gói, không tạo bộ test hay accuracy mới:
 
@@ -110,7 +115,7 @@ Mỗi lần chạy cần output mới. Không lấy việc chạy thành công t
 | Chưa có môi trường Python | Làm bước 2 tại đúng thư mục repo |
 | Thiếu model/cache | Kiểm tra checksum và vị trí giải nén, không huấn luyện lại chỉ để mở app |
 | Ảnh tham chiếu thiếu/khác checksum | Lấy đúng gói runtime cùng model; không sửa checksum để bỏ qua |
-| Supabase chưa cấu hình | Chọn **Trên máy chủ**; chỉ owner nhập khóa theo tài liệu Supabase |
+| Supabase chưa cấu hình | Bản local tự dùng ảnh trên máy; owner chạy `npm run setup:cloud`, rồi khởi động lại để chuyển sang cloud |
 | Cổng 8501 bận | `npm start -- --server.port 8502` |
 | Có nhiều xe trong ảnh | Chọn đúng số khung xe trong giao diện |
 

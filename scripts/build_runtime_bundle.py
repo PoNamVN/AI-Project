@@ -23,7 +23,7 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def runtime_files(root):
+def runtime_files(root, compact=False):
     root = Path(root).resolve()
     files = {}
 
@@ -42,6 +42,24 @@ def runtime_files(root):
     add(MODEL + '/model.json', 5_000_000)
     add(MODEL + '/classifier.npz', 20_000_000)
     metadata = json.loads(files[MODEL + '/model.json'].read_text(encoding='utf-8'))
+    if compact:
+        base = 'data/processed/vision-onnx-v31/'
+        add(base + 'runtime.json', 64_000)
+        add(base + 'validation.json', 64_000)
+        config = json.loads(files[base + 'runtime.json'].read_text(encoding='utf-8'))
+        validation = json.loads(files[base + 'validation.json'].read_text(encoding='utf-8'))
+        names = {'dino.onnx', 'siglip.onnx', 'detector.onnx', 'anchors.npz'}
+        if (set(config.get('files', {})) != names or validation.get('passed') is not True
+                or validation.get('runtime_manifest_sha256') != sha256(files[base + 'runtime.json'])
+                or config.get('model_metadata_sha256') != sha256(files[MODEL + '/model.json'])
+                or config.get('classifier_sha256') != sha256(files[MODEL + '/classifier.npz'])):
+            raise ValueError('Compact runtime has not passed validation for this classifier')
+        for name in sorted(names):
+            add(base + name, 400_000_000)
+            record = config['files'][name]
+            if files[base + name].stat().st_size != record.get('bytes') or sha256(files[base + name]) != record.get('sha256'):
+                raise ValueError('Compact runtime checksum changed')
+        return files
     for key, expected in (('dino', 'facebook/dinov2-small'), ('siglip', 'google/siglip2-base-patch16-224')):
         name, revision = metadata[key]
         if name != expected or not re.fullmatch('[a-f0-9]{40}', revision):
@@ -76,14 +94,18 @@ def runtime_files(root):
     return files
 
 
-def build(root, output):
+def build(root, output, cloud_only=False, compact=False):
     root, output = Path(root).resolve(), Path(output).resolve()
     checksum = output.with_suffix(output.suffix + '.sha256')
     if output.exists() or checksum.exists():
         raise ValueError('Choose a new output; never overwrite a bundle')
     if not output.is_relative_to(root / '.kickoff-build') or output.suffix != '.zip':
         raise ValueError('Output must be a new ZIP under .kickoff-build')
-    files = runtime_files(root)
+    files = runtime_files(root, compact=compact)
+    cloud_only = cloud_only or compact
+    if cloud_only:
+        files = {relative: path for relative, path in files.items()
+                 if not relative.startswith('data/raw/') and not relative.endswith('.csv')}
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix='runtime-', dir=output.parent) as temporary:
         staged = Path(temporary) / output.name
@@ -107,7 +129,8 @@ def build(root, output):
                 archive.writestr(relative, data)
                 records.append({'path': relative, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
             archive.writestr('.kickoff-build/runtime-bundle-manifest.json', json.dumps({
-                'schema_version': 1, 'model': MODEL, 'files': records,
+                'schema_version': 1, 'model': MODEL, 'files': records, 'cloud_references_required': cloud_only,
+                'inference_backend': 'onnx' if compact else 'torch',
                 'note': 'Existing development runtime and references; no new labels or accuracy.'
             }, ensure_ascii=False, indent=2))
         staged_checksum = Path(temporary) / checksum.name
@@ -120,8 +143,10 @@ def build(root, output):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--cloud-only', action='store_true', help='Không đóng gói ảnh train hoặc manifest lịch sử; máy chủ dùng Supabase')
+    parser.add_argument('--compact', action='store_true', help='Đóng gói runtime ONNX đã qua validation; không cần ảnh hoặc cache PyTorch')
     args = parser.parse_args()
     try:
-        print(json.dumps(build(ROOT, args.output), ensure_ascii=True))
+        print(json.dumps(build(ROOT, args.output, cloud_only=args.cloud_only, compact=args.compact), ensure_ascii=True))
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, str(error) + '\n')

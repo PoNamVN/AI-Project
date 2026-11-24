@@ -75,13 +75,18 @@ Sau khi phân tích, mỗi ứng viên Top-3 có **một ảnh train cùng lớp
 `candidate_references` bổ sung các ảnh này; `references` vẫn giữ ba ảnh train gần nhất toàn bộ cho bằng chứng trước đây, có thể trùng lớp.
 Không đổi head, trọng số, cách tính điểm hoặc bộ kiểm tra; việc bổ sung luồng này không tạo accuracy mới.
 
-Chọn một trong năm dòng hoặc **Không có mẫu phù hợp / chưa xác định**, rồi bấm **Lưu lựa chọn của tôi**.
+Bấm **Chọn Model…** dưới ảnh gợi ý hoặc **Không có mẫu phù hợp**.
+Để chọn một trong năm dòng khác, mở **Chọn dòng khác hoặc tải lại ảnh tham khảo**, chọn dòng rồi bấm **Lưu lựa chọn của tôi**.
 JSON có thêm `user_review`, checksum ảnh đầu vào và manifest mô hình. Lựa chọn không ghi đè dự đoán AI,
 không phải nhãn đã xác minh, không ghi database, không lưu ảnh người dùng hoặc tự đưa vào huấn luyện.
 Ảnh mới, nguồn chụp mới hoặc phân tích lại sẽ xóa kết quả/lựa chọn cũ. Tải JSON nếu muốn giữ kết quả trước khi đóng phiên.
 
-Nguồn ảnh đối chiếu **Trên máy chủ** dùng tệp local đã kiểm tra checksum. Chọn **Supabase riêng tư** để truy vấn
-checksum/nhãn của từng ảnh và chỉ tải tối đa ba ảnh cần hiển thị; xem cấu hình trong [supabase_data.md](supabase_data.md).
+Mặc định phân tích nhanh, không tạo bản đồ che vùng. Muốn xem bản đồ, mở **Tùy chọn phân tích**,
+bật giải thích chi tiết và phân tích lại. Điểm xếp hạng nằm trong phần kỹ thuật, không phải xác suất đúng.
+
+Ảnh đối chiếu tự lấy từ **Supabase riêng tư** khi máy chủ có đủ cấu hình kết nối; app truy vấn
+checksum/nhãn của từng ảnh và chỉ tải tối đa ba ảnh cần hiển thị. Khi chưa cấu hình, bản local dùng tệp trên máy đã kiểm tra checksum.
+Người xem không chọn nguồn lưu ảnh; xem cấu hình máy chủ trong [supabase_data.md](supabase_data.md).
 Cache chỉ giữ ba thumbnail trong phiên; nút tải lại cho phép thử lại khi kết nối lỗi. Không cần toàn bộ ảnh raw trên máy chủ
 nếu dùng cloud, nhưng vẫn cần model, pretrained weights và train feature vectors trên máy chủ.
 
@@ -178,3 +183,14 @@ Gate ngoài Tesla chưa được chứng minh trên tập lớn và có thể sa
 Tài liệu mô hình: [DINOv2](https://huggingface.co/docs/transformers/model_doc/dinov2),
 [SigLIP2](https://huggingface.co/google/siglip2-base-patch16-224),
 [SSDLite COCO](https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.detection.ssdlite320_mobilenet_v3_large.html).
+# Tối ưu vận hành ngày 25/11/2026
+
+Recognizer chỉ nạp nhánh ảnh của checkpoint SigLIP2 cố định; nhánh mã hóa văn bản không dùng lúc suy luận
+vì classifier đã chứa các vector văn bản. Không đổi trọng số, ngưỡng hoặc cách tính điểm. Engine dành cho
+huấn luyện/tạo đặc trưng vẫn mặc định đầy đủ. Đối chiếu năm ảnh train cũ cho kết quả và đặc trưng giống hệt
+bản đầy đủ (sai khác tối đa 0); không coi đây là bộ đánh giá mới.
+
+Ảnh đối chiếu lấy bản nhỏ đã kiểm checksum từ Supabase, cache chung có giới hạn; ảnh người dùng không cache chung.
+Hai đường phân tích ảnh được xếp lần lượt trong một process để giảm nguy cơ nhiều inference làm tăng RAM cùng lúc.
+Mặc định tắt công cụ rà dữ liệu; mở riêng trên máy nhóm bằng `npm run start:dev`.
+Xem [chuẩn bị Render](deploy_render.md) để phân biệt kết quả kiểm tra local với triển khai công khai.

@@ -147,6 +147,13 @@ class ReasoningTests(unittest.TestCase):
             self.assertIsNotNone(annotated)
             self.assertIsNotNone(heatmap)
             self.assertEqual(result["occlusion"]["score_drops"], [0] * 9)
+            large = io.BytesIO()
+            Image.new("RGB", (2400, 1800), "blue").save(large, format="PNG")
+            large_result, large_preview, _ = recognizer.analyze(large.getvalue(), explain=False)
+            self.assertLessEqual(large_preview.width, 1100)
+            self.assertLessEqual(large_preview.height, 700)
+            self.assertEqual(large_result["selected_box"], [0, 0, 32, 24])
+            self.assertEqual(large_result["candidates"], result["candidates"])
             self.assertTrue(
                 all(
                     p["status"].endswith("not_verified_part")

@@ -46,7 +46,7 @@ class WorkflowTests(unittest.TestCase):
             with patch("src.recognition_workflow.CloudData") as cloud:
                 cloud.return_value.reference_image.return_value = self.data
                 self.assertEqual(reference_preview(self.reference, root, True).width, 500)
-                cloud.return_value.reference_image.assert_called_once_with(self.reference["sha256"], "model_3")
+                cloud.return_value.reference_image.assert_called_once_with(self.reference["sha256"], "model_3", thumbnail=True)
             for source in ("../../outside.png", "/fixture/model_3/x.png", "fixture/model_y/x.png", "fixture/model_3/../x.png", "C:/model_3/x.png", None):
                 with self.subTest(source=source), self.assertRaises(ValueError):
                     reference_preview({**self.reference, "source_path": source}, root)

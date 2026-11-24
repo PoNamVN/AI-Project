@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def check(root=ROOT):
     root = Path(root).resolve()
     checks = []
-    for module in ("streamlit", "pandas", "PIL", "numpy", "torch", "torchvision", "transformers", "safetensors"):
+    compact = os.environ.get("CARVISION_INFERENCE_BACKEND", "torch") == "onnx"
+    modules = ("onnxruntime",) if compact else ("torch", "torchvision", "transformers", "safetensors")
+    for module in ("streamlit", "pandas", "PIL", "numpy", *modules):
         checks.append((module, importlib.util.find_spec(module) is not None, True))
     model = Path(os.environ.get("CARVISION_VISION_RUN", str(root / "data/processed/vision-recognition-v3-brand"))).resolve()
     inside = model.is_relative_to((root / "data/processed").resolve())
@@ -21,6 +23,13 @@ def check(root=ROOT):
     for name, maximum in (("model.json", 5_000_000), ("classifier.npz", 20_000_000)):
         path = model / name
         checks.append((name, inside and path.is_file() and 0 < path.stat().st_size <= maximum, True))
+    if compact:
+        runtime = root / "data/processed/vision-onnx-v31"
+        for name in ("runtime.json", "validation.json", "dino.onnx", "siglip.onnx", "detector.onnx", "anchors.npz"):
+            path = runtime / name
+            checks.append((name, path.is_file() and not path.is_symlink() and path.stat().st_size > 0, True))
+        checks.append(("Ảnh Supabase: cấu hình máy chủ (tùy chọn)", bool(os.environ.get("CARVISION_SUPABASE_URL") and os.environ.get("CARVISION_SUPABASE_KEY")), False))
+        return checks
     if inside and (model / "model.json").is_file() and (model / "model.json").stat().st_size <= 5_000_000:
         try:
             meta = json.loads((model / "model.json").read_text(encoding="utf-8"))

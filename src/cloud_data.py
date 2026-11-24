@@ -24,9 +24,12 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class CloudData:
-    def __init__(self):
-        self.url = os.environ.get("CARVISION_SUPABASE_URL", "").rstrip("/")
-        self.key = os.environ.get("CARVISION_SUPABASE_KEY", "")
+    def __init__(self, url=None, key=None):
+        url = os.environ.get("CARVISION_SUPABASE_URL", "") if url is None else url
+        self.key = os.environ.get("CARVISION_SUPABASE_KEY", "") if key is None else key
+        if not isinstance(url, str) or not isinstance(self.key, str):
+            raise ValueError("Cấu hình kết nối Supabase không hợp lệ.")
+        self.url = url.rstrip("/")
         if not re.fullmatch(r"https://[a-z0-9]{20}\.supabase\.co", self.url) or not self.key:
             raise ValueError("Cần CARVISION_SUPABASE_URL và CARVISION_SUPABASE_KEY trong môi trường máy chủ. Xem docs/supabase_data.md.")
 
@@ -86,7 +89,7 @@ class CloudData:
             raise ValueError("Ảnh tải về không khớp checksum; không sử dụng ảnh này.")
         return data
 
-    def reference_image(self, digest, class_id):
+    def reference_image(self, digest, class_id, thumbnail=False):
         """Fetch one training reference by its model-pinned checksum, not the dataset."""
         if (not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest)
                 or not isinstance(class_id, str) or class_id not in MODELS):
@@ -106,7 +109,72 @@ class CloudData:
                 or row.get("class_id") != class_id or row.get("decision") != "keep"
                 or row.get("uploaded") is not True):
             raise ValueError("Ảnh tham chiếu không khớp mô hình.")
+        preview = row.get("provenance", {}).get("preview_v1") if isinstance(row.get("provenance"), dict) else None
+        if thumbnail and preview is not None:
+            return self.thumbnail_image(row, preview)
         return self.image(row)
+
+    def thumbnail_image(self, row, preview):
+        digest = preview.get("sha256", "") if isinstance(preview, dict) else ""
+        source = row.get("sha256", "")
+        size = preview.get("byte_size", 0) if isinstance(preview, dict) else 0
+        path = f"previews/v1/{source}/{digest}.webp"
+        if (not re.fullmatch(r"[a-f0-9]{64}", source) or not re.fullmatch(r"[a-f0-9]{64}", digest)
+                or preview.get("source_sha256") != source or preview.get("class_id") != row.get("class_id")
+                or preview.get("object_path") != path or type(size) is not int or not 0 < size <= 250_000):
+            raise ValueError("Thông tin ảnh thu nhỏ không khớp ảnh gốc.")
+        data = self._get(f"/storage/v1/object/authenticated/{BUCKET}/{path}", size)
+        if len(data) != size or hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError("Ảnh thu nhỏ không khớp checksum; không sử dụng ảnh này.")
+        return data
+
+    def publish_thumbnail(self, row, data):
+        """Owner command only: immutable preview, then conditional provenance update."""
+        source = row.get("sha256", "")
+        if (not isinstance(source, str) or not re.fullmatch(r"[a-f0-9]{64}", source)
+                or row.get("class_id") not in MODELS or row.get("decision") != "keep"
+                or row.get("uploaded") is not True or not isinstance(row.get("provenance"), dict)
+                or not isinstance(data, bytes) or not 0 < len(data) <= 250_000
+                or not isinstance(row.get("dataset"), str) or not isinstance(row.get("relative_path"), str)):
+            raise ValueError("Không thể công bố ảnh thu nhỏ cho bản ghi này.")
+        digest = hashlib.sha256(data).hexdigest()
+        preview = dict(source_sha256=source, class_id=row["class_id"], sha256=digest,
+                       byte_size=len(data), object_path=f"previews/v1/{source}/{digest}.webp")
+        old = row["provenance"].get("preview_v1")
+        if old is not None:
+            if old != preview or self.thumbnail_image(row, old) != data:
+                raise ValueError("Ảnh thu nhỏ đã có khác phiên bản; giữ nguyên bản cũ.")
+            return False
+        headers = {"apikey": self.key, "Content-Type": "image/webp", "x-upsert": "false"}
+        if self.key.startswith("eyJ"):
+            headers["Authorization"] = "Bearer " + self.key
+        request = Request(self.url + f"/storage/v1/object/{BUCKET}/{preview['object_path']}",
+                          data=data, headers=headers, method="POST")
+        try:
+            with build_opener(NoRedirect).open(request, timeout=60) as response:
+                response.read(20_001)
+        except HTTPError as error:
+            if error.code not in (400, 409):
+                raise ValueError(f"Supabase HTTP {error.code} khi lưu ảnh thu nhỏ.") from None
+            # A previous interrupted run may already have written this immutable object.
+        except (URLError, TimeoutError, OSError):
+            raise ValueError("Không lưu được ảnh thu nhỏ trên Supabase.") from None
+        self.thumbnail_image(row, preview)
+        query = {"dataset": "eq." + row["dataset"], "relative_path": "eq." + row["relative_path"],
+                 "sha256": "eq." + source, "uploaded": "eq.true", "decision": "eq.keep",
+                 "provenance": "eq." + json.dumps(row["provenance"], separators=(",", ":")), "select": "sha256"}
+        headers.update({"Content-Type": "application/json", "Prefer": "return=representation"})
+        payload = json.dumps({"provenance": {**row["provenance"], "preview_v1": preview}}).encode()
+        request = Request(self.url + "/rest/v1/carvision_images?" + urlencode(query), data=payload,
+                          headers=headers, method="PATCH")
+        try:
+            with build_opener(NoRedirect).open(request, timeout=60) as response:
+                updated = json.loads(response.read(20_001))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+            raise ValueError("Chưa cập nhật được liên kết ảnh thu nhỏ; ảnh gốc được giữ nguyên.") from None
+        if updated != [{"sha256": source}]:
+            raise ValueError("Bản ghi đã đổi trong lúc xử lý; tải lại danh mục trước khi thử lại.")
+        return True
 
     def download(self, dataset, destination):
         destination = Path(destination).resolve()

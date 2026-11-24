@@ -84,3 +84,36 @@ class RuntimeBundleTests(unittest.TestCase):
                     bundle.build(root, target)
             self.assertFalse(target.exists())
             self.assertFalse(target.with_suffix('.zip.sha256').exists())
+
+    def test_cloud_bundle_excludes_dataset_and_preserves_licenses(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            target = root / '.kickoff-build/cloud.zip'
+            bundle.build(root, target, cloud_only=True)
+            with zipfile.ZipFile(target) as archive:
+                self.assertFalse(any(name.startswith('data/raw/') or name.endswith('.csv') for name in archive.namelist()))
+                self.assertIn('.kickoff-build/runtime-licenses/runtime_notices.md', archive.namelist())
+                self.assertTrue(json.loads(archive.read('.kickoff-build/runtime-bundle-manifest.json'))['cloud_references_required'])
+
+    def test_compact_bundle_needs_matching_validation_and_does_not_include_torch_cache(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            runtime = root / 'data/processed/vision-onnx-v31'
+            runtime.mkdir()
+            config = dict(model_metadata_sha256=bundle.sha256(root / bundle.MODEL / 'model.json'),
+                          classifier_sha256=bundle.sha256(root / bundle.MODEL / 'classifier.npz'), files={})
+            for name in ('dino.onnx', 'siglip.onnx', 'detector.onnx', 'anchors.npz'):
+                (runtime / name).write_bytes(b'fixture')
+                config['files'][name] = dict(bytes=7, sha256=bundle.sha256(runtime / name))
+            (runtime / 'runtime.json').write_text(json.dumps(config))
+            (runtime / 'validation.json').write_text(json.dumps(dict(passed=True, runtime_manifest_sha256=bundle.sha256(runtime / 'runtime.json'))))
+            target = root / '.kickoff-build/compact.zip'
+            bundle.build(root, target, compact=True)
+            with zipfile.ZipFile(target) as archive:
+                self.assertIn('data/processed/vision-onnx-v31/dino.onnx', archive.namelist())
+                self.assertFalse(any('huggingface/' in name or name.startswith('data/raw/') for name in archive.namelist()))
+            (runtime / 'dino.onnx').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'checksum'):
+                bundle.runtime_files(root, compact=True)

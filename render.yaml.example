@@ -1,0 +1,28 @@
+# Review the selected paid compute plan before copying to render.yaml or applying.
+services:
+  - type: web
+    name: carvision-ai
+    runtime: python
+    region: singapore
+    plan: 2c-4g
+    autoDeployTrigger: 'off'
+    buildCommand: pip install -r requirements-render.txt && python -m src.install_runtime
+    startCommand: python -m src.serve_public
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: CARVISION_ENABLE_DEV_TOOLS
+        value: "0"
+      - key: CARVISION_SUPABASE_URL
+        value: https://bnfqwqpqxoovoxnwunnx.supabase.co
+      - key: CARVISION_SUPABASE_KEY
+        sync: false
+      - key: CARVISION_RUNTIME_URL
+        sync: false
+      - key: CARVISION_RUNTIME_SHA256
+        sync: false
+      - key: HF_HUB_OFFLINE
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"

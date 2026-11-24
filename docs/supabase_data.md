@@ -24,16 +24,47 @@ Kho cloud vẫn giữ bản ứng viên gốc và trạng thái chưa được d
 
 ## Cấu hình trên máy chủ
 
-Không cần thêm thư viện. Dùng môi trường đã cài `requirements-demo.txt`.
-Owner cấu hình `CARVISION_SUPABASE_URL` và `CARVISION_SUPABASE_KEY` trong môi trường
-chạy Python/Streamlit. `.env.example` chỉ là mẫu tên biến; app không tự đọc `.env`.
-Trong PowerShell:
+Không thêm thư viện. Cần Node.js 20.12 trở lên và môi trường nhận diện theo hướng dẫn máy mới.
+Kết nối plugin Supabase trong Codex dùng để quản lý project; cấu hình app riêng một lần trên máy chủ tin cậy.
+
+1. Owner mở [Settings → API Keys của CarVision AI](https://supabase.com/dashboard/project/bnfqwqpqxoovoxnwunnx/settings/api-keys).
+   Lấy secret key bắt đầu bằng `sb_secret_`; nếu chưa có, tạo một key riêng cho máy chủ.
+   Không dùng publishable/anon key cho catalog đang đóng. Key từng xuất hiện trong chat/log cần được thu hồi và thay mới.
+2. Tại terminal của bạn trong thư mục repo, chạy:
+
+```powershell
+npm run setup:cloud
+```
+
+3. Dán secret key khi được hỏi; ký tự không hiện ra. Công cụ đọc thử **một ảnh tham chiếu cụ thể**,
+   kiểm tra kích thước, checksum và giải mã ảnh trước khi lưu. Không tải cả catalog hoặc nạp weights để kiểm tra kết nối.
+4. Khi thành công, cấu hình được lưu vào `.env` đã bị Git bỏ qua. Trên Windows tệp được giới hạn quyền
+   cho người đang thiết lập và SYSTEM; trên hệ thống hỗ trợ quyền POSIX tạo tệp với mode 0600.
+   Công cụ không ghi đè `.env` đã tồn tại và không lưu cấu hình nếu đọc ảnh thất bại.
+5. Khởi động lại app bằng `npm start`. Nếu bản local khác đang giữ cổng 8501, có thể chạy bản cloud riêng:
+
+```powershell
+npm start -- --server.port 8502
+```
+
+Mở URL terminal cung cấp. Người xem không cần khóa hoặc thao tác chọn nguồn ảnh.
+Những lần sau chỉ cần `npm start`; launcher đọc đúng hai tên `CARVISION_SUPABASE_URL` và `CARVISION_SUPABASE_KEY`
+từ `.env`, không in giá trị. Cấu hình đã đặt sẵn trong môi trường triển khai được ưu tiên hơn tệp local.
+Kiểm tra kết nối thực tế về sau bằng:
+
+```powershell
+npm run check:cloud
+```
+
+`npm run check` vẫn chỉ kiểm tra môi trường/tệp, không tải ảnh. Khi chạy Python trực tiếp hoặc deploy public,
+owner đặt hai biến trong môi trường/secret manager của máy chủ; Python không tự nạp `.env`.
+Ví dụ nhập vào phiên PowerShell, không ghi khóa vào câu lệnh:
 
 ```powershell
 $env:CARVISION_SUPABASE_URL = 'https://bnfqwqpqxoovoxnwunnx.supabase.co'
 $cloudKey = Read-Host 'Nhap secret key may chu tu Supabase Dashboard' -AsSecureString
 $env:CARVISION_SUPABASE_KEY = [System.Net.NetworkCredential]::new('', $cloudKey).Password
-.\.venv\Scripts\python.exe -m streamlit run app/app.py
+npm start
 ```
 
 Nhập khóa trực tiếp ở terminal của owner; không gửi vào chat, commit, chia sẻ cho người dùng
@@ -48,13 +79,23 @@ không tải toàn bộ dataset xuống máy người xem. Chế độ **Trên m
 
 ### Ảnh đối chiếu trong chế độ nhận diện · 18/11/2026
 
-Chọn **Nhận diện ảnh → Nguồn ảnh đối chiếu → Supabase riêng tư**. Máy chủ dùng cấu hình ở trên,
+Trong chế độ nhận diện, app tự dùng **Supabase riêng tư** khi máy chủ có đủ hai biến cấu hình ở trên;
+người xem không phải chọn nguồn lưu ảnh. Máy chủ dùng cấu hình đó,
 truy vấn đúng checksum và lớp của ảnh train đã ghim trong model (`limit=1`), rồi tải bytes qua đường dẫn authenticated.
 Giữ nguyên bucket private và RLS; không cấp quyền mới, không gửi server key xuống trình duyệt.
 Mỗi lần chỉ hiển thị tối đa ba ảnh; kiểm tra kích thước, SHA-256 và giới hạn pixel trước khi tạo thumbnail.
 Nếu thiếu cấu hình hoặc không tải được, kết quả dự đoán vẫn hiển thị và thẻ ảnh báo lỗi; có nút thử tải lại.
 Đối chiếu SQL ngày 18/11: 248 ảnh gốc, 172 ảnh keep/uploaded, đủ checksum của 105 ảnh train trong model V3.1.
 Đây là kiểm tra metadata; chưa thay thế kiểm thử tải bytes thực tế qua app khi cấu hình khóa máy chủ.
+
+Kiểm tra lại ngày 25/11/2026: project trước đó ở trạng thái INACTIVE, đã yêu cầu khôi phục và xác nhận ACTIVE_HEALTHY.
+Catalog vẫn có 248 ảnh uploaded, 172 ảnh keep/uploaded; tìm thấy đủ 248 object tương ứng trong metadata Storage,
+không có mục uploaded thiếu object. Đối chiếu checksum và lớp: đủ 105/105 ảnh tham chiếu trong model hiện tại.
+Không upload lại, không thay bucket private hoặc RLS. Đây vẫn là kiểm tra metadata, chưa xác minh bytes tải về qua app.
+Tiến trình app local tiếp tục dùng ảnh local cho tới khi owner hoàn tất cấu hình và khởi động lại.
+Ngày 25/11 đã kiểm tra đọc thực tế một ảnh Cybertruck private qua API: checksum khớp,
+giải mã được ảnh 3108 × 2331, 1.759.900 byte. Khóa kiểm tra không được lưu vào dự án;
+không coi phép thử CLI này là bằng chứng tiến trình app đã được cấu hình.
 
 ## Tải dữ liệu để chạy audit/huấn luyện
 
@@ -90,8 +131,29 @@ Kiểm tra sau upload: đủ 248 object và 248 dòng đã xác minh; tổng byt
 Security advisor chỉ có INFO “RLS Enabled No Policy”: đây là cấu hình đóng chủ đích,
 chưa cấp quyền người dùng; không tạo policy `true` để làm mất thông báo.
 [Giải thích INFO](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
-Performance advisor không có thông báo. Kiểm thử giao diện dùng ảnh giả;
-chưa kiểm tra app đọc cloud bằng khóa máy chủ thực tế vì owner chưa cấu hình khóa.
+Performance advisor không có thông báo trong lần kiểm tra trước. Kiểm thử giao diện cloud dùng ảnh giả;
+CLI đã đọc một ảnh thật như ghi ở trên, còn tiến trình app cần owner cấu hình và khởi động lại để kiểm tra trực tiếp.
 
 Tài liệu chính thức: [Storage access control](https://supabase.com/docs/guides/storage/security/access-control),
 [phục vụ ảnh riêng tư](https://supabase.com/docs/guides/storage/serving/downloads).
+# Ảnh đối chiếu thu nhỏ (25/11/2026)
+
+Đã thêm 105 ảnh WEBP thu nhỏ (tối đa 500×320), tổng 2,457,882 bytes so với 248,297,409 bytes ảnh gốc tương ứng.
+Ảnh gốc không sửa/xóa. Bản nhỏ nằm ở `previews/v1/<source_sha256>/<preview_sha256>.webp` trong cùng bucket riêng tư.
+Metadata/checksum/nhãn liên kết nằm trong `provenance.preview_v1`; giữ nguyên các trường ghi công/nguồn cũ,
+không thêm bảng hoặc đổi schema. Chỉ cập nhật liên kết nếu provenance vẫn giống lúc đọc, tránh đè thay đổi của người khác.
+
+Web ưu tiên bản nhỏ đã kiểm SHA-256; nếu chưa có metadata bản nhỏ thì vẫn kiểm và dùng ảnh gốc.
+Nếu metadata hoặc bytes bản nhỏ sai, app báo lỗi thay vì âm thầm dùng dữ liệu không khớp.
+Ảnh đối chiếu cloud thành công được cache trên máy chủ tối đa 32 ảnh/15 phút, tách theo cấu hình kết nối.
+Đây là ảnh tham chiếu từ tập train; không biến chúng thành bộ ảnh đánh giá độc lập.
+
+Lệnh dành riêng chủ máy chủ:
+
+```powershell
+npm run prepare:previews
+npm run prepare:previews -- --publish
+```
+
+Lệnh đầu chỉ chuẩn bị/đếm, lệnh sau mới upload và liên kết. Không ghi đè object đã có; có thể chạy lại để xác minh.
+Không dùng lệnh này để gửi ảnh người dùng hoặc ảnh mới chưa được rà nhãn.

@@ -1,0 +1,7 @@
+# Developer-only exporter; keep separate from the public web environment.
+-r requirements-vision.txt
+onnx==1.23.2
+onnxruntime==1.32.0
+onnx-ir==1.1.0
+ml_dtypes==0.5.4
+flatbuffers==25.12.19

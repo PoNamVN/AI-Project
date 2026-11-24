@@ -1,6 +1,6 @@
 # Tuần 5 — Demo CarVision AI và bàn giao
 
-Cập nhật 18/11/2026. Phạm vi năm dòng Tesla. V3.1 và các chỉ số tuần 4 được giữ nguyên;
+Cập nhật 25/11/2026. Phạm vi năm dòng Tesla. V3.1 và các chỉ số tuần 4 được giữ nguyên;
 đợt này hoàn thiện luồng sử dụng, không huấn luyện lại hoặc tạo số liệu accuracy mới.
 
 ## Chạy và thử
@@ -20,24 +20,32 @@ Mở Local URL terminal cung cấp. Trang mặc định là **Nhận diện ản
 
 1. **Chọn từ album / máy**: dùng JPG/JPEG/PNG/WEBP, một xe đủ sáng và trọn thân.
 2. Hoặc **Chụp trực tiếp**: cấp quyền camera khi muốn dùng; camera mạng cần HTTPS, localhost có thể dùng trên máy.
-3. Bấm **Phân tích ảnh**. Nếu ảnh có nhiều xe đáng chú ý, chọn số khung rồi phân tích xe đã chọn.
+3. Bấm **Phân tích ảnh** (chỉ bật khi có ảnh). Mặc định phân tích nhanh; muốn bản đồ che vùng,
+   mở **Tùy chọn phân tích**, bật giải thích chi tiết rồi phân tích lại. Nếu ảnh có nhiều xe đáng chú ý, chọn số khung rồi phân tích xe đã chọn.
 4. Đọc Top-3; mỗi dòng có một ảnh train cùng lớp để đối chiếu và nguồn/giấy phép.
-5. Chọn dòng xe hoặc **Không có mẫu phù hợp / chưa xác định**, bấm **Lưu lựa chọn của tôi**.
+5. Bấm **Chọn Model…** ngay dưới ảnh gợi ý hoặc **Không có mẫu phù hợp**.
+   Muốn chọn một dòng khác trong phạm vi hỗ trợ, mở **Chọn dòng khác hoặc tải lại ảnh tham khảo**, chọn rồi bấm **Lưu lựa chọn của tôi**.
 6. Đọc bằng chứng tương đồng và bản đồ che vùng. Chúng không xác nhận logo/đèn/cửa, đời hoặc phiên bản.
-7. **Tải giải thích · JSON** để giữ dự đoán, lựa chọn chưa xác minh, checksum ảnh và manifest model.
+7. **Tải kết quả · JSON** để giữ dự đoán, lựa chọn chưa xác minh, checksum ảnh và manifest model.
 
-Có thể thêm **Ảnh góc thứ hai**, xác nhận cùng một chiếc xe và bấm **Đối chiếu hai góc ảnh**.
+Có thể mở **Vẫn phân vân? Thêm một góc ảnh**, chọn **Ảnh góc thứ hai**, xác nhận cùng một chiếc xe và bấm **Đối chiếu hai góc ảnh**.
 Kết quả cho biết hai gợi ý thống nhất, mâu thuẫn hoặc thiếu căn cứ; không tăng điểm hay xác nhận tự động.
 Nếu góc thứ hai có nhiều xe, dùng ảnh chỉ có chiếc muốn đối chiếu; chưa có bộ chọn xe riêng cho góc thứ hai.
-Phần giải thích chuyên sâu ở mục mở rộng. Xem [quy trình kiểm tra ảnh mới](independent_evaluation.md).
+Phần giải thích chuyên sâu ở **Xem cách AI đưa ra gợi ý**. Xem [quy trình kiểm tra ảnh mới](independent_evaluation.md).
+
+Giao diện chính gồm ba bước: thêm ảnh, đọc gợi ý và đối chiếu/chọn mẫu.
+Điểm xếp hạng chỉ nằm trong phần kỹ thuật, không hiển thị thành phần trăm độ chắc chắn.
+Nguồn ảnh đối chiếu do máy chủ tự chọn: dùng Supabase khi đã có cấu hình kết nối, còn môi trường local chưa cấu hình dùng ảnh trên máy.
+Người xem không phải chọn nơi lưu ảnh. Các chế độ rà dữ liệu nằm trong sidebar,
+mục **Công cụ dành cho nhóm phát triển**; đây chỉ là cách bố trí, không phải cơ chế phân quyền.
 
 Ảnh và lựa chọn không tự ghi database hoặc trở thành dữ liệu huấn luyện. Đổi ảnh/nguồn chụp hoặc phân tích lại
 xóa kết quả và lựa chọn cũ. Lựa chọn người dùng không làm thay đổi Top-3 hoặc tỷ lệ chính xác đã đo.
 
 ## Kho ảnh riêng
 
-Mặc định dùng **Trên máy chủ**. Nếu server đã cấu hình theo [supabase_data.md](supabase_data.md),
-chọn **Supabase riêng tư**. App truy vấn theo checksum ghim trong model, không tải cả catalog/dataset;
+Nếu server đã cấu hình theo [supabase_data.md](supabase_data.md), app tự dùng **Supabase riêng tư**;
+khi chưa cấu hình, bản local dùng ảnh trên máy. App truy vấn theo checksum ghim trong model, không tải cả catalog/dataset;
 mỗi phiên chỉ cache tối đa ba thumbnail. Nếu gặp lỗi, dùng **Tải lại ảnh đối chiếu** hoặc chọn lại nguồn local.
 Server vẫn cần model, pretrained weights và vector train; người xem không tải chúng.
 Máy chủ hiện chưa được cấu hình biến môi trường cloud trong lần kiểm tra 18/11; không đưa secret key vào chat hay client.

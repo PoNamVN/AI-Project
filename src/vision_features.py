@@ -57,15 +57,16 @@ def padded_box(box, size):
 
 
 class VisionFeatures:
-    def __init__(self, download=False):
+    def __init__(self, download=False, image_only=False):
         import torch
         from torchvision.models.detection import (
             ssdlite320_mobilenet_v3_large,
             SSDLite320_MobileNet_V3_Large_Weights,
         )
-        from transformers import AutoImageProcessor, AutoModel, AutoProcessor
+        from transformers import AutoImageProcessor, AutoModel, AutoProcessor, SiglipVisionModel
 
         self.torch = torch
+        self.image_only = image_only
         torch.set_num_threads(min(4, os.cpu_count() or 1))
         cache = ROOT / ".kickoff-build/huggingface"
         torch.hub.set_dir(str(ROOT / ".kickoff-build/torch"))
@@ -86,12 +87,18 @@ class VisionFeatures:
         self.dino = AutoModel.from_pretrained(
             DINO[0], revision=DINO[1], use_safetensors=True, **options
         ).eval()
-        self.siglip_processor = AutoProcessor.from_pretrained(
+        processor = AutoImageProcessor if image_only else AutoProcessor
+        self.siglip_processor = processor.from_pretrained(
             SIGLIP[0], revision=SIGLIP[1], **options
         )
-        self.siglip = AutoModel.from_pretrained(
-            SIGLIP[0], revision=SIGLIP[1], use_safetensors=True, **options
-        ).eval()
+        # This fixed-resolution SigLIP2 checkpoint uses the Siglip vision architecture.
+        model = SiglipVisionModel if image_only else AutoModel
+        self.siglip, loading = model.from_pretrained(
+            SIGLIP[0], revision=SIGLIP[1], use_safetensors=True, output_loading_info=True, **options
+        )
+        if loading.get("missing_keys") or loading.get("mismatched_keys"):
+            raise ValueError("Checkpoint SigLIP thiếu hoặc lệch trọng số; không dùng mô hình khởi tạo ngẫu nhiên.")
+        self.siglip.eval()
 
     def detect(self, image):
         with self.torch.inference_mode():
@@ -121,12 +128,15 @@ class VisionFeatures:
                 )
             elif encoder == "siglip":
                 values = self.siglip_processor(images=images, return_tensors="pt")
-                features = self.siglip.vision_model(**values).pooler_output
+                vision = self.siglip if self.image_only else self.siglip.vision_model
+                features = vision(**values).pooler_output
             else:
                 raise ValueError("Unknown encoder")
         return normalized(features.cpu().numpy())
 
     def texts(self, descriptions):
+        if self.image_only:
+            raise ValueError("Chế độ nhận diện chỉ nạp nhánh ảnh; dùng engine đầy đủ khi tạo đặc trưng văn bản.")
         tokens = self.siglip_processor.tokenizer(
             descriptions,
             padding="max_length",

@@ -1,6 +1,7 @@
 .venv/
 .venv-ml/
 .venv-vision/
+.venv-onnx/
 venv/
 __pycache__/
 *.py[cod]
@@ -31,6 +32,8 @@ Thumbs.db
 *.pth
 *.pt
 *.npz
+*.onnx
+*.onnx.data
 *.sqlite*
 *.db
 *.db-*

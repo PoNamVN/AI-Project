@@ -15,6 +15,35 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class AppTests(unittest.TestCase):
+    def setUp(self):
+        self.dev = patch.dict("os.environ", {"CARVISION_ENABLE_DEV_TOOLS": "1"})
+        self.dev.start()
+        self.addCleanup(self.dev.stop)
+
+    def test_public_mode_cannot_open_data_tools_from_browser_state(self):
+        with patch.dict("os.environ", {"CARVISION_ENABLE_DEV_TOOLS": "0"}), \
+                patch("src.cloud_data.CloudData.catalog") as catalog, \
+                patch("src.data_audit.audit_dataset") as audit:
+            app = AppTest.from_file(str(ROOT / "app/app.py"))
+            app.query_params["source"] = "Supabase"
+            app.run(timeout=30)
+            self.assertFalse(app.exception)
+            self.assertFalse(app.sidebar.radio)
+            catalog.assert_not_called()
+            audit.assert_not_called()
+
+    def test_no_upload_disables_analysis_and_defaults_to_fast_mode(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "data/processed") as directory:
+            model = Path(directory)
+            (model / "model.json").write_text("{}")
+            with patch.dict("os.environ", {"CARVISION_VISION_RUN": str(model)}), patch("streamlit.file_uploader", return_value=None), \
+                    patch("src.recognize_vehicle.Recognizer") as engine:
+                app = AppTest.from_file(str(ROOT / "app/app.py")).run(timeout=30)
+                self.assertFalse(app.exception)
+                self.assertTrue(next(b for b in app.button if b.label == "Phân tích ảnh").disabled)
+                self.assertFalse(next(c for c in app.checkbox if c.label == "Giải thích chi tiết và bản đồ vùng ảnh ảnh hưởng").value)
+                engine.assert_not_called()
+
     def test_week5_album_camera_confirmation_and_reference_cache(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "data/processed") as directory:
             run = Path(directory)
@@ -32,7 +61,7 @@ class AppTests(unittest.TestCase):
                                                      sha256="a" * 64, license="CC0", source_url="https://example.org/test") for c, m in labels])
             engine = Mock(metadata={"manifest_sha256": "b" * 64})
             engine.analyze.return_value = (result, None, None)
-            with patch.dict("os.environ", {"CARVISION_VISION_RUN": str(run)}), \
+            with patch.dict("os.environ", {"CARVISION_VISION_RUN": str(run), "CARVISION_SUPABASE_URL": "", "CARVISION_SUPABASE_KEY": ""}), \
                     patch("streamlit.file_uploader", return_value=uploaded) as uploader, \
                     patch("streamlit.camera_input", return_value=uploaded) as camera, \
                     patch("src.recognize_vehicle.Recognizer", return_value=engine), \
@@ -42,6 +71,15 @@ class AppTests(unittest.TestCase):
                 next(b for b in app.button if b.label == "Phân tích ảnh").click().run()
                 self.assertFalse(app.exception)
                 self.assertEqual(preview.call_count, 3)
+                self.assertFalse(preview.call_args.args[2])
+                self.assertFalse(engine.analyze.call_args.args[2])
+                next(b for b in app.button if b.label == "Chọn Model S").click().run()
+                self.assertEqual(app.session_state["vehicle_review"]["user_review"]["class_id"], "model_s")
+                self.assertEqual(app.session_state["recognition"][1]["candidates"][0]["class_id"], "model_3")
+                self.assertEqual(engine.analyze.call_count, 1)
+                next(b for b in app.button if b.label == "Không có mẫu phù hợp").click().run()
+                self.assertEqual(app.session_state["vehicle_review"]["user_review"]["decision"], "no_match")
+                self.assertEqual(engine.analyze.call_count, 1)
                 app.run()
                 self.assertEqual(preview.call_count, 3)
                 next(c for c in app.checkbox if c.label == "Tôi xác nhận hai ảnh chụp cùng một chiếc xe").set_value(True).run()
@@ -63,7 +101,8 @@ class AppTests(unittest.TestCase):
                 next(s for s in app.selectbox if s.label == "Theo bạn, đây là dòng nào?").set_value(None).run()
                 next(b for b in app.button if b.label == "Lưu lựa chọn của tôi").click().run()
                 self.assertEqual(app.session_state["vehicle_review"]["user_review"]["decision"], "no_match")
-                next(r for r in app.radio if r.label == "Nguồn ảnh đối chiếu").set_value("Supabase riêng tư").run()
+                with patch.dict("os.environ", {"CARVISION_SUPABASE_URL": "https://abcdefghijklmnopqrst.supabase.co", "CARVISION_SUPABASE_KEY": "fixture-server-key"}):
+                    app.run()
                 self.assertEqual(preview.call_count, 6)
                 self.assertTrue(preview.call_args.args[2])
                 uploader.return_value = other
@@ -75,6 +114,13 @@ class AppTests(unittest.TestCase):
                 next(b for b in app.button if b.label == "Phân tích ảnh").click().run()
                 self.assertGreater(camera.call_count, 0)
                 self.assertFalse(app.exception)
+                next(r for r in app.radio if r.label == "Ảnh chiếc xe").set_value("Chọn từ album / máy").run()
+                uploader.return_value = io.BytesIO(b"invalid image")
+                app.run()
+                self.assertFalse(app.exception)
+                self.assertTrue(app.error)
+                self.assertNotIn("recognition", app.session_state)
+                self.assertNotIn("vehicle_review", app.session_state)
 
     def test_recognition_upload_and_multiple_vehicle_selection(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "data/processed") as directory:

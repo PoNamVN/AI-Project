@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -102,7 +103,15 @@ class Recognizer:
             or not np.isfinite(self.brand_weights).all()
         ):
             raise ValueError("Brand classifier không hợp lệ.")
-        self.engine = engine if engine is not None else VisionFeatures()
+        if engine is not None:
+            self.engine = engine
+        elif os.environ.get("CARVISION_INFERENCE_BACKEND", "torch") == "onnx":
+            from src.onnx_features import OnnxFeatures
+            self.engine = OnnxFeatures(run)
+        elif os.environ.get("CARVISION_INFERENCE_BACKEND", "torch") == "torch":
+            self.engine = VisionFeatures(image_only=True)
+        else:
+            raise ValueError("Backend nhận diện phải là onnx hoặc torch.")
 
     def scores(self, features):
         if self.metadata["classifier"] == "zeroshot":
@@ -163,9 +172,13 @@ class Recognizer:
             scores = ridge_scores(vector[None], self.brand_weights)[0]
             margin = float(scores[1] - scores[0])
             brand_scores = {"other_car": float(scores[0]), "tesla": float(scores[1])}
-        annotated = image.copy()
+        preview_scale = min(1.0, 1100 / image.width, 700 / image.height)
+        preview_size = (max(1, round(image.width * preview_scale)), max(1, round(image.height * preview_scale)))
+        annotated = image.resize(preview_size, Image.Resampling.LANCZOS)
+        preview_box = [round(value * (annotated.width / image.width if i % 2 == 0 else annotated.height / image.height))
+                       for i, value in enumerate(box)]
         ImageDraw.Draw(annotated).rectangle(
-            box, outline="#25b6c4", width=max(3, image.width // 250)
+            preview_box, outline="#25b6c4", width=max(2, annotated.width // 250)
         )
         base.update(
             selected_box=box,
